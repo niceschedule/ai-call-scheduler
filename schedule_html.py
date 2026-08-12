@@ -829,7 +829,7 @@ def write_html_schedule(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Call Schedule | Nice Schedule</title>
+    <title>Call Schedule | PostCallMD</title>
     <style>{css}</style>
 </head>
 <body>
@@ -1112,7 +1112,7 @@ def write_html_schedule(
             </div>
             <div class="grid-watermark">
                 <span>{all_dates[0].strftime('%B %-d')} &ndash; {all_dates[-1].strftime('%B %-d, %Y')}</span>
-                <span>Built with <a href="https://niceschedule.com">Nice Schedule</a></span>
+                <span>Built with <a href="https://postcallmd.com">PostCallMD</a></span>
             </div>
         </div>
 

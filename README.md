@@ -24,13 +24,13 @@
 
 Deterministic on-call schedules for medical groups. Hand it a roster, the shifts to cover, and any time-off requests; it produces a printable, drag-and-drop-editable HTML schedule that respects every hard rule and balances totals, weekends, and recent history.
 
-This is the open-source base of [Nice Schedule](https://niceschedule.com/). The production solver that has published [Trident Anesthesia's](https://niceschedule.com/customers/trident-anesthesia/) monthly call schedule since November 2025 — twenty-five physicians, two hospitals, six surgery centers — builds on what is in this repo.
+This is the open-source base of [PostCallMD](https://postcallmd.com/). The production solver that has published [Trident Anesthesia's](https://postcallmd.com/customers/trident-anesthesia/) monthly call schedule since November 2025 — twenty-five physicians, two hospitals, six surgery centers — builds on what is in this repo.
 
 ![A printable two-week on-call schedule: a color-coded grid for a sample six-clinician group, with per-person shift and weekend totals, a legend, and a plain-English summary.](img/sample-schedule-hero.png)
 
-**[Poke at this exact schedule, live →](https://niceschedule.com/sample-schedule/)** — it is the file the sample solve writes; drag the shifts around.
+**[Poke at this exact schedule, live →](https://postcallmd.com/sample-schedule/)** — it is the file the sample solve writes; drag the shifts around.
 
-![Animated demo: a chief copies the prompt from niceschedule.com into a coding agent, which clones the repo, runs the built-in sample, and opens the printable schedule.](img/agent-demo.gif)
+![Animated demo: a chief copies the prompt from postcallmd.com into a coding agent, which clones the repo, runs the built-in sample, and opens the printable schedule.](img/agent-demo.gif)
 
 *If this saved your group a weekend, a ⭐ helps other schedulers find it.*
 
@@ -42,9 +42,9 @@ The schedule itself is computed by [Google's OR-Tools](https://developers.google
 
 You're in the wrong place. The walkthrough was written for you, on the web — no GitHub, no clone, no terminal:
 
-**[niceschedule.com/how-to-make-a-schedule-with-ai](https://niceschedule.com/how-to-make-a-schedule-with-ai/)**
+**[postcallmd.com/how-to-make-a-schedule-with-ai](https://postcallmd.com/how-to-make-a-schedule-with-ai/)**
 
-It walks you through pointing Claude Code or Codex at this repo and getting your first real schedule. If you want this done for you instead, **[Nice Schedule](https://niceschedule.com/)** is the hosted product — maintained by RumbleLab for anesthesia groups.
+It walks you through pointing Claude Code or Codex at this repo and getting your first real schedule. If you want this done for you instead, **[PostCallMD](https://postcallmd.com/)** is the hosted product — maintained by RumbleLab for anesthesia groups.
 
 ## Quick start
 
@@ -60,7 +60,7 @@ open output/sample_schedule.html   # macOS — xdg-open / start on Linux / Windo
 
 That runs the built-in sample — a fake 6-doctor group — and opens the printable HTML output.
 
-To adapt it to your own group, the friction-free path is to paste the [agent handoff prompt](https://niceschedule.com/how-to-make-a-schedule-with-ai/#agent) into Claude Code or Codex; the agent reads [`AGENTS.md`](AGENTS.md) and drives the setup. The manual path is [`docs/new-practice-setup.md`](docs/new-practice-setup.md).
+To adapt it to your own group, the friction-free path is to paste the [agent handoff prompt](https://postcallmd.com/how-to-make-a-schedule-with-ai/#agent) into Claude Code or Codex; the agent reads [`AGENTS.md`](AGENTS.md) and drives the setup. The manual path is [`docs/new-practice-setup.md`](docs/new-practice-setup.md).
 
 ## What it handles
 
@@ -117,7 +117,7 @@ This is an honest, minimal implementation — useful for learning how a real cal
 - **No notifications, no calendar sync, no integrations.** The output is an HTML file. That's the entire deliverable.
 - **No multi-user collaboration.** Whoever has the repo has the schedule.
 
-If you want any of that out of the box — or you want this run for you — see **[Nice Schedule](https://niceschedule.com/)**: same engine, hosted, maintained, with the surrounding workflow built out for anesthesia groups.
+If you want any of that out of the box — or you want this run for you — see **[PostCallMD](https://postcallmd.com/)**: same engine, hosted, maintained, with the surrounding workflow built out for anesthesia groups.
 
 ## Privacy
 
@@ -125,7 +125,7 @@ The solver runs locally on your machine. Chat and coding-agent context may still
 
 ## Stuck, or found a bug?
 
-[Open an issue](https://github.com/niceschedule/ai-call-scheduler/issues) — "my month won't solve" questions welcome; infeasible months are the interesting ones. Or email [moultrie@niceschedule.com](mailto:moultrie@niceschedule.com) and a person answers. [`docs/troubleshooting.md`](docs/troubleshooting.md) covers every error the tool itself can raise.
+[Open an issue](https://github.com/niceschedule/ai-call-scheduler/issues) — "my month won't solve" questions welcome; infeasible months are the interesting ones. Or email [moultrie@postcallmd.com](mailto:moultrie@postcallmd.com) and a person answers. [`docs/troubleshooting.md`](docs/troubleshooting.md) covers every error the tool itself can raise.
 
 ## License
 

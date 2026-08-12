@@ -52,7 +52,7 @@ Every row in `clinicians.csv` has `active=0`, or the file is empty. Set `active=
 
 ### `No coverage rows found.`
 
-`coverage.csv` is empty (or only has a header). The solver has nothing to schedule. Generate coverage rows for the dates and shift types you want filled. See the [coverage section of the walkthrough](https://niceschedule.com/how-to-make-a-schedule-with-ai/#coverage) for the script pattern.
+`coverage.csv` is empty (or only has a header). The solver has nothing to schedule. Generate coverage rows for the dates and shift types you want filled. See the [coverage section of the walkthrough](https://postcallmd.com/how-to-make-a-schedule-with-ai/#coverage) for the script pattern.
 
 ### `Missing eligibility column 'can_X' for shift type 'X'.`
 
@@ -157,4 +157,4 @@ History is used for the `history_balance` weight only. It doesn't block; it trie
 
 ## When to ask for help
 
-If you've worked through this list and the solver still won't solve, paste the full error message and the relevant CSV row(s) into your coding agent and ask it to walk the model with you. If the agent is stuck too, email `moultrie@niceschedule.com` with the CSVs and the error output.
+If you've worked through this list and the solver still won't solve, paste the full error message and the relevant CSV row(s) into your coding agent and ask it to walk the model with you. If the agent is stuck too, email `moultrie@postcallmd.com` with the CSVs and the error output.

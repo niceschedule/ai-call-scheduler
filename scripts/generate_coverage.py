@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a coverage.csv for a calendar month from a shift_pattern.csv.
 
-Helper for the Nice Schedule AI tutorial. The solver needs a coverage row for
+Helper for the PostCallMD AI tutorial. The solver needs a coverage row for
 every shift it has to staff; typing them by hand is tedious and error-prone.
 This script writes a full month of rows by reading a small shift_pattern.csv
 that lives next to the coverage file.

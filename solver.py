@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small CP-SAT call schedule solver for the Nice Schedule AI tutorial.
+"""Small CP-SAT call schedule solver for the PostCallMD AI tutorial.
 
 This is a teaching example, not a production scheduler. It keeps the rule set
 small on purpose so a human or coding agent can understand and extend it.
