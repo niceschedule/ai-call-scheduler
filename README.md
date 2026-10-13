@@ -99,6 +99,8 @@ A small CP-SAT model in [`solver.py`](solver.py) reads four CSVs from `data/samp
 | [`docs/new-practice-setup.md`](docs/new-practice-setup.md) | First-time setup for a real group. |
 | [`docs/agent-privacy.md`](docs/agent-privacy.md) | Brief privacy disclosure. |
 
+Claude Code users also get a packaged skill, [`.claude/skills/call-schedule/SKILL.md`](.claude/skills/call-schedule/SKILL.md), that walks an agent through the whole flow from a conversation.
+
 ## Tests
 
 A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files — the same check CI runs on every push:
