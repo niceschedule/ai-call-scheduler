@@ -48,7 +48,7 @@ It walks you through pointing Claude Code or Codex at this repo and getting your
 
 ## Quick start
 
-For developers evaluating the repo. Five minutes from clone to a rendered sample schedule on screen. Requires Python 3.10+ (tested on 3.12 with OR-Tools 9.15).
+For developers evaluating the repo. Five minutes from clone to a rendered sample schedule on screen. Requires Python 3.9+, which is what OR-Tools 9.15 needs (tested on 3.12).
 
 ```bash
 git clone https://github.com/niceschedule/ai-call-scheduler.git
