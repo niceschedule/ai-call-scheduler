@@ -1,6 +1,6 @@
 # Adaptation Cookbook
 
-Three worked examples of changes a real group will want, in order of difficulty. Each one shows:
+Worked examples of changes a real group will want, in order of difficulty, plus the three rules a PostCallMD export names in `shift_types.csv`. Each one shows:
 
 1. What rows/columns to change in the CSVs.
 2. What (if anything) to change in `solver.py`.
@@ -156,12 +156,213 @@ The agent prompt: *"Read the SOFT PREFERENCE 5 block in solver.py, then add a co
 
 ---
 
+## App rules from shift_types.csv
+
+A PostCallMD export (see the app-route section of `AGENTS.md`) carries a fifth file, `shift_types.csv`, with one row per shift type and three rule flags the solver does not enforce on its own:
+
+| Flag | Meaning in the app |
+| --- | --- |
+| `next_day_off` | `1` means the day after this shift is off. |
+| `weekend_block` | `1` means one person works Saturday and Sunday of this shift together. |
+| `post_call_ok` | `0` means a clinician who was on call the day before may not work this shift. |
+
+`scripts/from_postcallmd.py` prints which shift types carry which flag. The three entries below read the flag from the file, so a group without `shift_types.csv` is not affected, and a change of a flag in the app reaches the solver with the next export. Add one entry at a time. Each needs a plain-English description and a clear yes before you edit `solver.py`.
+
+One fact to know first: with `min_days_between_assignments` of 1 or more, which is the template default, no clinician works two days in a row anyway. The first and third entries change the schedule only when a group sets the rest gap to 0, so that people may work back to back except where a flag forbids it. The second entry needs the rest rule to make one exception, and shows how.
+
+### Shared helper: read the flags
+
+Add this function to `solver.py` after `eligibility_column`:
+
+```python
+def load_shift_flags(path: Path) -> dict[str, dict]:
+    """Read shift_types.csv from a PostCallMD export. Keyed by the upper-case
+    code, the same key coverage rows use. Empty when the file is absent, so a
+    group without the file solves as before."""
+    if not path.exists():
+        return {}
+    flags: dict[str, dict] = {}
+    for row in read_csv(path):
+        code = row.get("code", "").strip().upper()
+        if not code:
+            continue
+        flags[code] = {
+            "category": row.get("category", "").strip().lower(),
+            "post_call_ok": parse_bool(row.get("post_call_ok", "").strip() or "1"),
+            "next_day_off": parse_bool(row.get("next_day_off", "").strip() or "0"),
+            "weekend_block": parse_bool(row.get("weekend_block", "").strip() or "0"),
+        }
+    return flags
+```
+
+Then, in `solve()`, right after the line that loads history:
+
+```python
+    shift_flags = load_shift_flags(input_dir / "shift_types.csv")
+```
+
+The three entries below go into `solve()` after the block that builds `day_assigned` (search for `day_assigned[(day, clinician_id)] = var`) and before `HARD RULE 3`. `timedelta`, `date` and `defaultdict` are already imported.
+
+---
+
+## 5. Post-call day off (`next_day_off`)
+
+"After OR call, the next day is off." The flag is `next_day_off` in `shift_types.csv`.
+
+### CSV changes
+
+None. The flag comes from the export. To let people work back to back on the shifts without the flag, set `min_days_between_assignments_default` to `0` in `config/my_rules.json`, or set the column to `0` for the people it applies to.
+
+### Code changes
+
+```python
+    # HARD RULE: a shift with next_day_off gives the next day off.
+    # The Saturday row of a weekend_block shift is skipped: the block itself
+    # covers Sunday, and the day off follows the Sunday row.
+    for cov_id, cov in enumerate(coverage):
+        flags = shift_flags.get(cov.shift_type, {})
+        if not flags.get("next_day_off"):
+            continue
+        if cov.date.weekday() == 5 and flags.get("weekend_block"):
+            continue
+        for clinician_id in clinician_ids:
+            tomorrow = day_assigned.get((cov.date + timedelta(days=1), clinician_id))
+            if tomorrow is not None:
+                model.Add(x[(cov_id, clinician_id)] + tomorrow <= 1)
+```
+
+For a weekend-block shift, the Saturday row is skipped on purpose. The block covers Sunday, and the day off follows the Sunday row.
+
+### How to test
+
+```bash
+.venv/bin/python scripts/run_my_schedule.py
+```
+
+Open the CSV output. For every row whose shift type has `next_day_off = 1`, the same clinician has no row on the next date. If the solver finds no schedule, the group is short of people for consecutive days: raise `max_shifts`, or lower `required_count`.
+
+The agent prompt: *"Add a hard rule that a shift type with next_day_off = 1 in shift_types.csv gives the clinician the next day off. Use the existing day_assigned variables. Skip the Saturday row of a weekend_block shift."*
+
+---
+
+## 6. Weekend block (`weekend_block`)
+
+"Whoever has OB call on Saturday also has it on Sunday." The flag is `weekend_block` in `shift_types.csv`. This is the opposite of entry 3, which keeps Saturday and Sunday apart. Use one or the other for a shift type, not both.
+
+### CSV changes
+
+None. The flag comes from the export. Note that a block counts as two weekend shifts against `target_weekend_shifts` and `max_weekend_shifts`. If the check script reports weekend capacity as tight after you add the rule, raise `max_weekend_shifts` for the people who take the block, or ask for the yearly weekend number in the app to change.
+
+### Code changes
+
+First, the pairing:
+
+```python
+    # HARD RULE: a weekend_block shift is worked Saturday and Sunday by the
+    # same person. weekend_block_pairs lets the rest rule allow that one
+    # back-to-back pair.
+    slot_index = {(cov.date, cov.shift_type): cov_id for cov_id, cov in enumerate(coverage)}
+    weekend_block_pairs: list[tuple[int, int]] = []
+    for cov_id, cov in enumerate(coverage):
+        if cov.date.weekday() != 5 or not shift_flags.get(cov.shift_type, {}).get("weekend_block"):
+            continue
+        sunday_id = slot_index.get((cov.date + timedelta(days=1), cov.shift_type))
+        if sunday_id is None:
+            continue
+        weekend_block_pairs.append((cov_id, sunday_id))
+        for clinician_id in clinician_ids:
+            model.Add(x[(cov_id, clinician_id)] == x[(sunday_id, clinician_id)])
+```
+
+Second, the rest rule must allow that one back-to-back pair. In `HARD RULE 5` (search for `if gap <= min_gap:`), replace
+
+```python
+                if gap <= min_gap:
+                    model.Add(a + b <= 1)
+```
+
+with
+
+```python
+                if gap <= min_gap:
+                    # A weekend block is the one allowed back-to-back pair.
+                    block = [
+                        x[(sat_id, clinician_id)]
+                        for sat_id, _ in weekend_block_pairs
+                        if coverage[sat_id].date == day_a and gap == 1
+                    ]
+                    model.Add(a + b <= 1 + sum(block))
+```
+
+For everyone who does not hold the block, `sum(block)` is 0 and the rest rule is unchanged.
+
+### How to test
+
+```bash
+.venv/bin/python scripts/run_my_schedule.py
+```
+
+Open the CSV output. For every Saturday row of a `weekend_block` shift type, the Sunday row of the same shift type names the same clinician. Everyone else still has no two days in a row. If the solver finds no schedule, the weekend caps are the usual cause. Raise `max_weekend_shifts` to at least 2 for the people who take the block.
+
+The agent prompt: *"Add a hard rule that a shift type with weekend_block = 1 in shift_types.csv is worked by the same clinician on Saturday and on the Sunday after it. Let the minimum-rest rule allow that one pair. Keep the rule off for every other shift type."*
+
+---
+
+## 7. Post-call eligibility (`post_call_ok`)
+
+"Nobody works the pain clinic shift the day after call." The flag is `post_call_ok` in `shift_types.csv`. A `0` means the shift may not be worked by a clinician who was on call the day before. "On call" means any row whose shift type has `category = call` in the same file.
+
+This entry matters most with `scope = all` exports, where daily shifts sit beside call shifts, and for groups with a rest gap of 0. With `scope = call` and a rest gap of 1 or more it changes nothing, because entry 5 and the rest rule already keep the day after call empty.
+
+### CSV changes
+
+None. The flag comes from the export.
+
+### Code changes
+
+```python
+    # HARD RULE: a shift with post_call_ok = 0 is not worked by a clinician
+    # who was on call the day before. "On call" means any row whose shift
+    # type has category call in shift_types.csv. The Sunday of a weekend
+    # block is exempt, because the block is one assignment.
+    call_rows_by_date: dict[date, list[int]] = defaultdict(list)
+    for cov_id, cov in enumerate(coverage):
+        if shift_flags.get(cov.shift_type, {}).get("category") == "call":
+            call_rows_by_date[cov.date].append(cov_id)
+    for cov_id, cov in enumerate(coverage):
+        flags = shift_flags.get(cov.shift_type, {})
+        if flags.get("post_call_ok", True):
+            continue
+        for prev_id in call_rows_by_date.get(cov.date - timedelta(days=1), []):
+            prev = coverage[prev_id]
+            if (
+                prev.date.weekday() == 5
+                and prev.shift_type == cov.shift_type
+                and flags.get("weekend_block")
+            ):
+                continue
+            for clinician_id in clinician_ids:
+                model.Add(x[(prev_id, clinician_id)] + x[(cov_id, clinician_id)] <= 1)
+```
+
+### How to test
+
+```bash
+.venv/bin/python scripts/run_my_schedule.py
+```
+
+Open the CSV output. For every row whose shift type has `post_call_ok = 0`, the same clinician has no `call` row on the day before, except the Sunday of a weekend block. If the solver finds no schedule, fewer people are free the day after call than the shift needs. Lower its `required_count`, or set `post_call_ok` to `1` in the app for that shift and export again.
+
+The agent prompt: *"Add a hard rule that a shift type with post_call_ok = 0 in shift_types.csv is not worked by a clinician who worked a call-category shift the day before. Exempt the Sunday of a weekend block."*
+
+---
+
 ## What to add next
 
 The pattern is the same for almost any rule:
 
 - **Holiday balancing:** add a `holidays.csv` (date list), count assignments on those dates per clinician, add an objective term that minimizes the spread.
-- **Post-call recovery:** after a NIGHT shift, no shift the next day. This is a rest-gap rule specific to one shift type — extend the existing `min_days_between_assignments` logic to be per-shift-type.
+- **Post-call recovery for one shift type without `shift_types.csv`:** entry 5 keys on the file. For a group that has none, hard-code the shift type: replace `shift_flags.get(cov.shift_type, {}).get("next_day_off")` with `cov.shift_type == "NIGHT"`.
 - **Partner vs non-partner:** add an `is_partner` column to `clinicians.csv`, then add an objective that pushes leftover call onto partners after non-partners hit their `target_shifts`.
 - **Site-specific eligibility:** already supported. Just use distinct shift types (`NORTH`, `SOUTH`, `EAST`) and matching `can_*` columns.
 
