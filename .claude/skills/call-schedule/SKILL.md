@@ -15,7 +15,7 @@ Read `AGENTS.md` first. It sets the tone and says which files to leave alone (`s
 
 Show a real schedule before asking questions.
 
-1. From the repo root, run `./scripts/quickstart.sh`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`.
+1. From the repo root, run `./scripts/quickstart.sh`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`. If the machine has no git, download `https://github.com/niceschedule/ai-call-scheduler/archive/refs/heads/main.zip`, unpack it, and run the script from the unpacked folder.
 2. Manual equivalent: `python3 -m venv .venv`, `.venv/bin/python -m pip install -r requirements.txt`, `.venv/bin/python solver.py`, then open the HTML file (`open` on macOS, `xdg-open` on Linux, `start` on Windows).
 3. Confirm the output says `Status: OPTIMAL`.
 4. Tell the person this is a made-up six-doctor group. Mention that dragging a shift onto another person on the same day makes a one-off swap in the HTML. Bigger changes are done by re-solving.
@@ -84,6 +84,21 @@ Say this once when real data first appears. The solver runs locally. The chat it
 
 ## Publish to PostCallMD
 
-Placeholder: Steps to upload output/schedule.csv to PostCallMD are being written; see the hosted product at https://postcallmd.com/.
+Use this section when the person came through the PostCallMD MCP server. You can tell: the tools `export_solver_inputs`, `get_practice_overview`, `submit_schedule_draft` and `save_solver` are in your tool list. On that route the roster, coverage, requests and history are already in the app, so skip section 2. Read the app-route section of `AGENTS.md` first.
 
-Do not invent upload steps. Until this section is filled in, do not tell the person that an upload is possible from this repo.
+Two scripts carry the data between the app and the solver. You paste nothing by hand in either direction.
+
+1. Read `get_scheduling_rules`. The newest record is the practice's rulebook. Follow it.
+2. Call `export_solver_inputs` for the month (`YYYY-MM`). Save the whole result, all six keys, as JSON to `output/postcallmd_export.json`.
+3. Run `.venv/bin/python scripts/from_postcallmd.py output/postcallmd_export.json`. It writes the five CSV files and `notes.txt` into `data/my_data/` and creates `config/my_rules.json` from the template when it is missing. It stops on a missing key or column.
+4. Read the notes it prints. They name the requests and rules the files cannot express. Tell the person about each one. The three shift-type rules (`next_day_off`, `weekend_block`, `post_call_ok`) have worked code in `docs/adaptation-cookbook.md`, section "App rules from shift_types.csv". Add one only with a clear yes.
+5. Run `.venv/bin/python scripts/run_my_schedule.py`. Fix every error the data check reports before the solve. Report the result as in section 3.
+6. Call `get_practice_overview`. Save the whole result as JSON to `output/postcallmd_overview.json`. Its `shift_types` array carries the ids.
+7. Run `.venv/bin/python scripts/to_postcallmd_draft.py --overview output/postcallmd_overview.json`. It reads the solver output named in `config/my_rules.json` and writes `output/postcallmd_draft.json`. It stops on a shift code with no id.
+8. Call `submit_schedule_draft` with `start_date`, `end_date`, `mode` and `assignments` taken from that file. `mode` is `fill_empty`: it adds entries and skips cells that already hold one.
+9. Report `created`, `skipped` and `apply_findings` from the response, plus the call count per clinician that the draft script printed. If `skipped` is not zero, say which cells the app already had.
+10. Ask the person to review the draft in the app. After they confirm it, call `save_solver` once. Send `config/my_rules.json`, every repo file you changed (for example `solver.py` after a cookbook rule), the rules as numbered plain sentences in `rules_text`, these steps as `run_instructions`, and the month as `source_draft_month`. The next month then starts from the stored solver.
+
+Never publish. The admin publishes in the app. The only app writes on this route are `submit_schedule_draft` and `save_solver`. To undo a draft, call `revert_schedule_draft` with the `solver_run_id` from the submit response.
+
+If `submit_schedule_draft` reports an unknown `shift_type_id`, the saved overview is stale. Save `get_practice_overview` again and rerun step 7.

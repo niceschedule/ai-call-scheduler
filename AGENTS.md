@@ -53,6 +53,17 @@ Before the first real solve, you need four things — ask for each by name:
 
 `docs/new-practice-setup.md` has the phrasing, the defaults, and how each answer becomes a CSV.
 
+## Arriving from PostCallMD (the app route)
+
+Some users come through the PostCallMD MCP server instead of the walkthrough. You can tell: the tools `export_solver_inputs`, `get_practice_overview`, `submit_schedule_draft` and `save_solver` are in your tool list, or the prompt names PostCallMD. On that route:
+
+- The roster, coverage, requests and history are already in the app. Do not ask for them again, and do not type CSVs by hand. `export_solver_inputs` returns the files for a month, and `scripts/from_postcallmd.py` writes them into `data/my_data/`. The export carries the app's clinician UUIDs and shift codes. Keep them. The draft script needs them to send the schedule back.
+- Read `get_scheduling_rules` first. The newest record is the practice's rulebook. Follow it.
+- The interview shrinks to two topics. First, the rules the files cannot express: the export's notes name them, and `shift_types.csv` carries the three shift-type flags (`next_day_off`, `weekend_block`, `post_call_ok`) that `docs/adaptation-cookbook.md` shows how to add. Second, the targets per person: the export fills `target_shifts` and the caps from the app's yearly numbers, or estimates them from FTE when a person has none. Read the targets back to the user and ask whether they look right.
+- A lasting change to a person's targets or eligibility belongs in the app (`update_clinician`, `set_clinician_eligibility`), followed by a new export. A change for one month only may stay in the CSV. Say so in the report, because the next export overwrites it.
+- Still run the sample first, so the user sees a schedule before you touch their data.
+- The steps that send the schedule back are in the skill file, section "Publish to PostCallMD": the draft script, `submit_schedule_draft` in `fill_empty` mode, the `apply_findings` report, and `save_solver` after the admin confirms. Never publish. The admin publishes in the app.
+
 ## What to edit, what to leave alone
 
 The repo is a tutorial; its files are stable artifacts that every user clones. Adapt the user's own files, not the examples.
