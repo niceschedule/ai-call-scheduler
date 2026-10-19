@@ -1,0 +1,9 @@
+{
+  "name": "ai-call-scheduler",
+  "description": "Deterministic on-call schedules for medical groups, driven from a conversation.",
+  "version": "0.1.0",
+  "author": {
+    "name": "niceschedule",
+    "url": "https://github.com/niceschedule"
+  }
+}

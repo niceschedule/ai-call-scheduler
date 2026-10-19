@@ -9,6 +9,7 @@ The sample solver reads four CSV files from the configured input directory.
 | `clinician_id` | No | Stable ID used by other files. If blank, derived from `name` (e.g. `Alice Smith` → `alice_smith`). Fill in explicitly when two clinicians share a name. |
 | `name` | Yes | Display name for output, and the source for the auto-derived `clinician_id`. |
 | `active` | Yes | `1` if the clinician can be scheduled. |
+| `fte` | No | Full-time share, such as `1.0` or `0.8`. Informational in v1: the solver does not read it. The PostCallMD export fills it, and the sample carries it, so the files match. |
 | `can_or` | Yes for `OR` shifts | `1` if eligible for OR. |
 | `can_ob` | Yes for `OB` shifts | `1` if eligible for OB. |
 | `target_shifts` | Yes | Preferred number of assignments in the solve period. |

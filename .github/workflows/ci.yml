@@ -20,3 +20,5 @@ jobs:
           pip install -r requirements.txt
       - name: Run sample solve smoke test
         run: python tests/smoke_test.py
+      - name: Run PostCallMD bridge tests
+        run: python tests/test_postcallmd_bridge.py

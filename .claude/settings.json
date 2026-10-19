@@ -11,7 +11,12 @@
       "Bash(cp -R data/template data/my_data)",
       "Bash(cp config/my_rules.template.json config/my_rules.json)",
       "Bash(open output/*.html)",
-      "Bash(xdg-open output/*.html)"
+      "Bash(xdg-open output/*.html)",
+      "Bash(./scripts/quickstart.sh)",
+      "Bash(scripts/quickstart.sh)",
+      "Bash(bash scripts/quickstart.sh)",
+      "Bash(.venv/bin/python scripts/from_postcallmd.py:*)",
+      "Bash(.venv/bin/python scripts/to_postcallmd_draft.py:*)"
     ]
   }
 }
