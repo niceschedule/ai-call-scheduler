@@ -1,0 +1,51 @@
+{
+  "sites": [
+    {
+      "id": "7c0d2c2a-1111-4b2b-8c3d-0a0a0a0a0a01",
+      "code": "TMC",
+      "name": "Town Medical Center"
+    }
+  ],
+  "shift_types": [
+    {
+      "id": "5e8a1c3e-aaaa-4c4c-9d9d-0b0b0b0b0b01",
+      "code": "OR Call",
+      "name": "OR Call",
+      "category": "call",
+      "facility_id": "7c0d2c2a-1111-4b2b-8c3d-0a0a0a0a0a01",
+      "active": true,
+      "post_call_ok": false,
+      "next_day_off": true,
+      "weekend_block": false,
+      "color": "#1d4ed8"
+    },
+    {
+      "id": "5e8a1c3e-aaaa-4c4c-9d9d-0b0b0b0b0b02",
+      "code": "OB Call",
+      "name": "OB Call",
+      "category": "call",
+      "facility_id": "7c0d2c2a-1111-4b2b-8c3d-0a0a0a0a0a01",
+      "active": true,
+      "post_call_ok": false,
+      "next_day_off": true,
+      "weekend_block": true,
+      "color": "#be185d"
+    },
+    {
+      "id": "5e8a1c3e-aaaa-4c4c-9d9d-0b0b0b0b0b03",
+      "code": "AM",
+      "name": "Morning room",
+      "category": "daily",
+      "facility_id": "7c0d2c2a-1111-4b2b-8c3d-0a0a0a0a0a01",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    }
+  ],
+  "periods": [],
+  "request_types": [],
+  "settings": {},
+  "stored_solvers": []
+}
