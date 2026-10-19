@@ -15,7 +15,7 @@ Read `AGENTS.md` first. It sets the tone and says which files to leave alone (`s
 
 Show a real schedule before asking questions.
 
-1. From the repo root, run `./scripts/quickstart.sh`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`.
+1. From the repo root, run `./scripts/quickstart.sh`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`. If the machine has no git, download `https://github.com/niceschedule/ai-call-scheduler/archive/refs/heads/main.zip`, unpack it, and run the script from the unpacked folder.
 2. Manual equivalent: `python3 -m venv .venv`, `.venv/bin/python -m pip install -r requirements.txt`, `.venv/bin/python solver.py`, then open the HTML file (`open` on macOS, `xdg-open` on Linux, `start` on Windows).
 3. Confirm the output says `Status: OPTIMAL`.
 4. Tell the person this is a made-up six-doctor group. Mention that dragging a shift onto another person on the same day makes a one-off swap in the HTML. Bigger changes are done by re-solving.

@@ -60,6 +60,12 @@ open output/sample_schedule.html   # macOS — xdg-open / start on Linux / Windo
 
 That runs the built-in sample — a fake 6-doctor group — and opens the printable HTML output.
 
+No git? Download the zip of the main branch, unpack it, and run the same commands from the unpacked folder:
+
+```
+https://github.com/niceschedule/ai-call-scheduler/archive/refs/heads/main.zip
+```
+
 To adapt it to your own group, the friction-free path is to paste the [agent handoff prompt](https://postcallmd.com/how-to-make-a-schedule-with-ai/#agent) into Claude Code or Codex; the agent reads [`AGENTS.md`](AGENTS.md) and drives the setup. The manual path is [`docs/new-practice-setup.md`](docs/new-practice-setup.md).
 
 ## What it handles
