@@ -77,10 +77,25 @@ Some users come through the PostCallMD MCP server instead of the walkthrough. Yo
 
 - The roster, coverage, requests and history are already in the app. Do not ask for them again, and do not type CSVs by hand. `export_solver_inputs` returns the files for a month, and `scripts/from_postcallmd.py` writes them into `data/my_data/`. The export carries the app's clinician UUIDs and shift codes. Keep them. The draft script needs them to send the schedule back.
 - Read `get_scheduling_rules` first. The newest record is the practice's rulebook. Follow it.
-- The interview shrinks to two topics. First, the rules the files cannot express: the export's notes name them, and `shift_types.csv` carries the three shift-type flags (`next_day_off`, `weekend_block`, `post_call_ok`) that `docs/adaptation-cookbook.md` shows how to add. Second, the targets per person: the export fills `target_shifts` and the caps from the app's yearly numbers, or estimates them from FTE when a person has none. Read the targets back to the user and ask whether they look right.
+- The interview shrinks to two topics. First, the rules the files cannot express: the export's notes name them, and `shift_types.csv` carries the three shift-type flags (`next_day_off`, `weekend_block`, `post_call_ok`) that `docs/adaptation-cookbook.md` shows how to add. Add them in the order the cookbook states: weekend block first. Second, the targets per person: the export fills `target_shifts` and the caps from the app's yearly numbers, or estimates them from FTE when a person has none. Read the targets back to the user and ask whether they look right.
 - A lasting change to a person's targets or eligibility belongs in the app (`update_clinician`, `set_clinician_eligibility`), followed by a new export. A change for one month only may stay in the CSV. Say so in the report, because the next export overwrites it.
 - Still run the sample first, so the user sees a schedule before you touch their data.
 - The steps that send the schedule back are in the skill file, section "Publish to PostCallMD": the draft script, `submit_schedule_draft` in `fill_empty` mode, the `apply_findings` report, and `save_solver` after the admin confirms. Never publish. The admin publishes in the app.
+- A line in the export's notes that starts with `BLOCKING:` names a rule the solver cannot keep. Stop there. Tell the admin each line in plain words. The draft script refuses to write a draft while such a line is in `data/my_data/notes.txt`.
+
+### Each month on the app route
+
+The app holds the month's data, so each month starts from a new export. This loop replaces `scripts/start_next_month.py` on the app route. Do not run that script here, and do not edit `requests.csv` or `history.csv` by hand. The export carries the month's approved requests and the app's history.
+
+1. If `get_solver` returns a stored solver, write each of its files to its path in the clone first.
+2. Read `get_scheduling_rules`. Follow the newest record.
+3. Export: call `export_solver_inputs` for the month (`YYYY-MM`). Save the whole result as JSON to `output/postcallmd_export.json`.
+4. Import: run `python3 scripts/py scripts/from_postcallmd.py output/postcallmd_export.json`. It replaces the files in `data/my_data/` and points `config/my_rules.json` at `output/schedule_YYYY-MM.csv`. If it prints a STOP line, stop and tell the admin each `BLOCKING:` line.
+5. Solve: run `python3 scripts/py scripts/run_my_schedule.py`. Give the short report.
+6. Draft: call `get_practice_overview` and save the result to `output/postcallmd_overview.json`. Then run `python3 scripts/py scripts/to_postcallmd_draft.py --overview output/postcallmd_overview.json --month YYYY-MM`.
+7. Submit: call `submit_schedule_draft` with the fields from `output/postcallmd_draft.json`. Report `created`, `skipped` and `apply_findings`.
+
+Call `save_solver` again only when a solver file changed this month, for example after a new cookbook rule. A change you made to `clinicians.csv` for last month is gone after the new export. Make a lasting change in the app.
 
 ## What to edit, what to leave alone
 
@@ -114,7 +129,7 @@ After every solve, give a short plain-language report: whether it found a valid 
 
 ## Returning next month
 
-Don't restart from the tutorial each month.
+Don't restart from the tutorial each month. On the app route, use "Each month on the app route" above instead of these steps.
 
 1. `python3 scripts/py scripts/start_next_month.py` (infers the next month from the output filename, or pass `--year 2026 --month 8`). Its first line names the month — confirm it before continuing.
 2. Update `requests.csv` with new time-off (or pass `--reset-requests` for a clean file).
