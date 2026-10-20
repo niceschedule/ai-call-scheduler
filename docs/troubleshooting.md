@@ -12,15 +12,13 @@ The general rule when something breaks: **remove the most recent change first.**
 
 You skipped the install, or you're running the system Python instead of the venv one.
 
-Fix:
+Fix: run the script through the launcher. It makes the venv and installs OR-Tools when they are missing.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python solver.py
+python3 scripts/py solver.py
 ```
 
-On Windows the venv path is different — use `.venv\Scripts\python` wherever this guide shows `.venv/bin/python`.
+On Windows, use `py -3 scripts/py solver.py`. The launcher finds `.venv\Scripts\python.exe` there. Wherever this guide shows `.venv/bin/python <script>`, `python3 scripts/py <script>` does the same on every system.
 
 ### OR-Tools install hangs or fails
 

@@ -6,19 +6,29 @@ on:
   pull_request:
 
 jobs:
-  sample-solve:
-    name: Sample solve smoke test
-    runs-on: ubuntu-latest
+  test:
+    name: ${{ matrix.os }}, Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # 3.9 is the stated minimum (README). 3.12 is what most people run.
+        python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run sample solve smoke test
-        run: python tests/smoke_test.py
-      - name: Run PostCallMD bridge tests
-        run: python tests/test_postcallmd_bridge.py
+          python-version: ${{ matrix.python }}
+      # The same commands a user runs. quickstart.py makes .venv through
+      # scripts/py, installs requirements-dev.txt (requirements.txt plus
+      # pytest) and solves the sample.
+      - name: Quickstart
+        run: python scripts/quickstart.py --no-open --dev
+      - name: Tests
+        run: python scripts/py -m pytest -v tests/
+        env:
+          # The Windows runner is slow enough that the sample solve can hit
+          # the solver's 60-second limit before it proves the schedule is
+          # the best one. See tests/smoke_test.py.
+          SMOKE_ACCEPT_FEASIBLE: ${{ runner.os == 'Windows' && '1' || '' }}

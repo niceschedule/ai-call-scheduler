@@ -107,6 +107,7 @@ The config file controls where data is read from, where output is written, and t
 | --- | --- |
 | `input_dir` | Directory containing the four CSVs. Relative to the config file. |
 | `output_csv` | Where the solved schedule is written. Relative to the config file. |
+| `enforces` | PostCallMD route only. The shift-type rules this solver keeps: `weekend_block`, `next_day_off`, `post_call_ok`. `scripts/to_postcallmd_draft.py` clears a `BLOCKING:` line for a listed rule only when `solver.py` has that rule from `docs/adaptation-cookbook.md`. The solver does not read this key. |
 
 ### `rules.min_days_between_assignments_default`
 

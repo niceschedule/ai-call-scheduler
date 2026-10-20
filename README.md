@@ -48,17 +48,19 @@ It walks you through pointing Claude Code or Codex at this repo and getting your
 
 ## Quick start
 
-For developers evaluating the repo. Five minutes from clone to a rendered sample schedule on screen. Requires Python 3.9+, which is what OR-Tools 9.15 needs (tested on 3.12).
+For developers evaluating the repo. Five minutes from clone to a rendered sample schedule on screen. Requires Python 3.9 or newer, which is what OR-Tools 9.15 needs. CI runs on Linux, macOS and Windows with Python 3.9 and 3.12.
 
 ```bash
 git clone https://github.com/niceschedule/ai-call-scheduler.git
 cd ai-call-scheduler
-pip install -r requirements.txt
-python solver.py
-open output/sample_schedule.html   # macOS — xdg-open / start on Linux / Windows
+python3 scripts/quickstart.py
 ```
 
-That runs the built-in sample — a fake 6-doctor group — and opens the printable HTML output.
+On Windows, run `py -3 scripts/quickstart.py` instead.
+
+That makes a `.venv`, installs OR-Tools, runs the built-in sample (a fake 6-doctor group), and opens the printable HTML output.
+
+Every other script runs the same way through the launcher `scripts/py`, which finds the venv's Python on each system: `python3 scripts/py scripts/run_my_schedule.py` on macOS and Linux, `py -3 scripts/py scripts/run_my_schedule.py` on Windows.
 
 No git? Download the zip of the main branch, unpack it, and run the same commands from the unpacked folder:
 
@@ -109,11 +111,13 @@ Claude Code users also get a packaged skill, [`.claude/skills/call-schedule/SKIL
 
 ## Tests
 
-A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files — the same check CI runs on every push:
+A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files. The other tests cover the PostCallMD bridge scripts, the cookbook rules and the launcher. CI runs all of them on Linux, macOS and Windows with Python 3.9 and 3.12:
 
 ```bash
-python tests/smoke_test.py
+python3 scripts/py --dev -m pytest tests/
 ```
+
+On Windows, use `py -3` in place of `python3`. `--dev` installs `requirements-dev.txt` (pytest) into `.venv` the first time. Each test file also runs without pytest, for example `python3 scripts/py tests/smoke_test.py`.
 
 ## Known limitations
 

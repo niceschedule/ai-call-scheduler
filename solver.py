@@ -512,7 +512,7 @@ def solve(config_path: Path, verbose: bool = False) -> int:
                     }
                 )
 
-    with output_path.open("w", newline="") as f:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f, fieldnames=["date", "shift_type", "clinician_id", "name"]
         )
