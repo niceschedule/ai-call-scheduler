@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -243,7 +244,8 @@ def main() -> int:
     print(f"Updated {config_path} to write {next_output}.")
     print()
     print("Next run:")
-    print("  .venv/bin/python scripts/run_my_schedule.py")
+    prefix = "py -3 scripts/py" if os.name == "nt" else "python3 scripts/py"
+    print(f"  {prefix} scripts/run_my_schedule.py")
     return 0
 
 

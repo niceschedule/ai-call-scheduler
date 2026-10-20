@@ -41,7 +41,8 @@ The script writes nothing and stops when:
   a UUID.
 * an assignment date is outside the month.
 
-    .venv/bin/python scripts/to_postcallmd_draft.py --overview overview.json --out draft.json
+    python3 scripts/py scripts/to_postcallmd_draft.py --overview overview.json --month 2026-07
+    (Windows: py -3 scripts/py ...)
 """
 
 from __future__ import annotations
@@ -409,7 +410,7 @@ def main() -> int:
     }
     out_path = resolve_path(root, args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w") as f:
+    with out_path.open("w", encoding="utf-8", newline="\n") as f:
         json.dump(draft, f, indent=2)
         f.write("\n")
 

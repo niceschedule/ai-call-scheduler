@@ -30,7 +30,7 @@ with lines that start with "BLOCKING:". Each one is a rule the solver cannot
 keep. The script prints them, and scripts/to_postcallmd_draft.py refuses to
 write a draft while any is there.
 
-    .venv/bin/python scripts/from_postcallmd.py export.json
+    python3 scripts/py scripts/from_postcallmd.py export.json     (Windows: py -3 scripts/py ...)
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -109,6 +110,11 @@ def display_path(root: Path, path: Path) -> str:
 def fail(message: str) -> int:
     print(f"from_postcallmd: {message}", file=sys.stderr)
     return 2
+
+
+def launcher() -> str:
+    """The command prefix that runs a script with the venv's Python here."""
+    return "py -3 scripts/py" if os.name == "nt" else "python3 scripts/py"
 
 
 def load_export(path: Path) -> dict:
@@ -308,7 +314,10 @@ def main() -> int:
         text = export[key]
         if not text.endswith("\n"):
             text += "\n"
-        (data_dir / filename).write_text(text, encoding="utf-8", newline="")
+        # open(newline="") keeps the export's line endings. Path.write_text
+        # has no newline argument before Python 3.10.
+        with (data_dir / filename).open("w", encoding="utf-8", newline="") as f:
+            f.write(text)
         count = len(csv_rows(text)) if filename.endswith(".csv") else len(text.splitlines())
         written.append((filename, count))
 
@@ -360,8 +369,8 @@ def main() -> int:
         print("Tell the admin about each line. Fix the rule in the app or in the solver, then export again.")
     print()
     print("Next:")
-    print(f"  .venv/bin/python scripts/check_my_data.py --config {display_path(root, config_path)}")
-    print(f"  .venv/bin/python scripts/run_my_schedule.py --config {display_path(root, config_path)}")
+    print(f"  {launcher()} scripts/check_my_data.py --config {display_path(root, config_path)}")
+    print(f"  {launcher()} scripts/run_my_schedule.py --config {display_path(root, config_path)}")
     return 0
 
 

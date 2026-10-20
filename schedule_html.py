@@ -260,9 +260,9 @@ def build_schedule_summary(
         for r in locks:
             name = clinicians.get(r.clinician_id, {}).get("name", r.clinician_id)
             if r.start_date == r.end_date:
-                when = r.start_date.strftime("%a %b %-d")
+                when = f"{r.start_date:%a %b} {r.start_date.day}"
             else:
-                when = f"{r.start_date.strftime('%b %-d')}–{r.end_date.strftime('%b %-d')}"
+                when = f"{r.start_date:%b} {r.start_date.day}–{r.end_date:%b} {r.end_date.day}"
             bullets.append(f"{name} pinned to {r.shift_type} on {when}.")
 
     active_totals = [totals[cid] for cid in clinicians if totals.get(cid, 0) > 0]
@@ -307,7 +307,7 @@ def build_schedule_summary(
 
     for r, d, shift in soft_violations:
         name = clinicians.get(r.clinician_id, {}).get("name", r.clinician_id)
-        when = d.strftime("%a %b %-d")
+        when = f"{d:%a %b} {d.day}"
         phrase = SOFT_REQUEST_PHRASE.get(r.request_type, r.request_type.replace("_", " "))
         suffix = f" ({r.note})" if r.note else ""
         bullets.append(
@@ -420,7 +420,7 @@ def write_html_schedule(
     header_html = '<div class="gh corner">Clinician</div>\n'
     for d in all_dates:
         weekend_cls = " weekend" if is_weekend(d) else ""
-        header_html += f'<div class="gh{weekend_cls}">{d.strftime("%a %-d")}</div>\n'
+        header_html += f'<div class="gh{weekend_cls}">{d:%a} {d.day}</div>\n'
     header_html += '<div class="gh totals col-total">Total</div>\n'
     header_html += '<div class="gh totals col-weekend">Weekend</div>\n'
 
@@ -1099,7 +1099,7 @@ def write_html_schedule(
         <header>
             <div class="header-copy">
                 <h1>Call Schedule</h1>
-                <div class="subtitle">{all_dates[0].strftime('%B %-d')} &ndash; {all_dates[-1].strftime('%B %-d, %Y')}</div>
+                <div class="subtitle">{all_dates[0]:%B} {all_dates[0].day} &ndash; {all_dates[-1]:%B} {all_dates[-1].day}, {all_dates[-1].year}</div>
             </div>
         </header>
 
@@ -1111,7 +1111,7 @@ def write_html_schedule(
                 </div>
             </div>
             <div class="grid-watermark">
-                <span>{all_dates[0].strftime('%B %-d')} &ndash; {all_dates[-1].strftime('%B %-d, %Y')}</span>
+                <span>{all_dates[0]:%B} {all_dates[0].day} &ndash; {all_dates[-1]:%B} {all_dates[-1].day}, {all_dates[-1].year}</span>
                 <span>Built with <a href="https://postcallmd.com">PostCallMD</a></span>
             </div>
         </div>
@@ -1125,5 +1125,5 @@ def write_html_schedule(
 </body>
 </html>
 """
-    with output_path.open("w") as f:
+    with output_path.open("w", encoding="utf-8") as f:
         f.write(html)

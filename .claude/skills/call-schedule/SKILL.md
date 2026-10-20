@@ -11,12 +11,16 @@ The person is usually a clinician, not a programmer. Speak in plain English. Say
 
 Read `AGENTS.md` first. It sets the tone and says which files to leave alone (`solver.py`, `schedule_html.py`, `README.md`, `docs/*`, `config/sample_rules.json`, `data/sample/*`). If the person's own prompt asks for something different, follow the prompt.
 
+## Commands on every system
+
+Run every Python step through `scripts/py`. It finds the venv's Python on macOS, Linux and Windows, and it makes `.venv` on first use. This file writes the macOS and Linux form, `python3 scripts/py <script>`. On Windows, type `py -3` where a step says `python3`. If Windows has no `py` command, use `python`. Python 3.9 or newer is needed.
+
 ## 1. Run the sample and show it
 
 Show a real schedule before asking questions.
 
-1. From the repo root, run `./scripts/quickstart.sh`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`. If the machine has no git, download `https://github.com/niceschedule/ai-call-scheduler/archive/refs/heads/main.zip`, unpack it, and run the script from the unpacked folder.
-2. Manual equivalent: `python3 -m venv .venv`, `.venv/bin/python -m pip install -r requirements.txt`, `.venv/bin/python solver.py`, then open the HTML file (`open` on macOS, `xdg-open` on Linux, `start` on Windows).
+1. From the repo root, run `python3 scripts/quickstart.py`. It installs what is missing, solves the sample, and opens `output/sample_schedule.html`. If the machine has no git, download `https://github.com/niceschedule/ai-call-scheduler/archive/refs/heads/main.zip`, unpack it, and run the script from the unpacked folder.
+2. Manual equivalent: `python3 scripts/py solver.py`, then open the HTML file (`open` on macOS, `xdg-open` on Linux, `start` on Windows).
 3. Confirm the output says `Status: OPTIMAL`.
 4. Tell the person this is a made-up six-doctor group. Mention that dragging a shift onto another person on the same day makes a one-off swap in the HTML. Bigger changes are done by re-solving.
 5. Ask about their group in one open question: how many people, what shifts, what period.
@@ -39,7 +43,7 @@ Then build the files:
 1. Copy the templates: `cp -R data/template data/my_data` and `cp config/my_rules.template.json config/my_rules.json`.
 2. Fill `data/my_data/clinicians.csv`. Leave `clinician_id` blank. It is derived from the name. Add a `can_<shift>` column for every shift type.
 3. Fill `data/my_data/shift_pattern.csv` with rows of `shift_type,weekday_mask,required_count`. The mask has seven characters, Monday to Sunday.
-4. Generate the month of coverage: `.venv/bin/python scripts/generate_coverage.py --year YYYY --month M`.
+4. Generate the month of coverage: `python3 scripts/py scripts/generate_coverage.py --year YYYY --month M`.
 5. Fill `requests.csv` (types `vacation`, `no_call`, `prefer_off`, `lock`) and `history.csv`.
 6. Check `config/my_rules.json` for the input folder, the output path, and the rule weights.
 
@@ -49,7 +53,7 @@ For rules the CSVs cannot express, see `docs/adaptation-cookbook.md`. Changing `
 
 ## 3. Solve a month
 
-1. Run `.venv/bin/python scripts/run_my_schedule.py`. It checks the data, prints a capacity summary, solves, and opens the HTML.
+1. Run `python3 scripts/py scripts/run_my_schedule.py`. It checks the data, prints a capacity summary, solves, and opens the HTML.
 2. Read the capacity summary before the solve result. If a shift is short or tight, say so in human terms, for example "OR coverage is tight, so extra time off may make it hard".
 3. Report in plain language: whether a valid schedule was found, how many shifts were filled, what ran tight, and one thing to try next, as a question.
 4. A status of `FEASIBLE` instead of `OPTIMAL` means the time limit ran out. The schedule is valid but may be slightly less balanced. See `docs/troubleshooting.md`.
@@ -72,11 +76,11 @@ Tell the person which coverage rows were hardest to fill, in plain terms, and of
 
 Do not restart the tutorial each month.
 
-1. Run `.venv/bin/python scripts/start_next_month.py`. It infers the month from the output filename, or pass `--year YYYY --month M`. Its first line names the month. Confirm it with the person.
+1. Run `python3 scripts/py scripts/start_next_month.py`. It infers the month from the output filename, or pass `--year YYYY --month M`. Its first line names the month. Confirm it with the person.
 2. The script files the last schedule into history, regenerates coverage, and points the config at a new dated output file.
 3. Update `requests.csv` with new time off, or pass `--reset-requests` for a clean file.
 4. Edit `clinicians.csv` only for roster, eligibility, or target changes.
-5. Run `.venv/bin/python scripts/run_my_schedule.py` and give a short report.
+5. Run `python3 scripts/py scripts/run_my_schedule.py` and give a short report.
 
 ## Privacy
 
@@ -90,11 +94,11 @@ Two scripts carry the data between the app and the solver. You paste nothing by 
 
 1. Read `get_scheduling_rules`. The newest record is the practice's rulebook. Follow it.
 2. Call `export_solver_inputs` for the month (`YYYY-MM`). Save the whole result, all six keys, as JSON to `output/postcallmd_export.json`.
-3. Run `.venv/bin/python scripts/from_postcallmd.py output/postcallmd_export.json`. It writes the five CSV files and `notes.txt` into `data/my_data/` and creates `config/my_rules.json` from the template when it is missing. It stops on a missing key or column.
+3. Run `python3 scripts/py scripts/from_postcallmd.py output/postcallmd_export.json`. It writes the five CSV files and `notes.txt` into `data/my_data/` and creates `config/my_rules.json` from the template when it is missing. It stops on a missing key or column.
 4. Read the notes it prints. They name the requests and rules the files cannot express. Tell the person about each one. The three shift-type rules (`next_day_off`, `weekend_block`, `post_call_ok`) have worked code in `docs/adaptation-cookbook.md`, section "App rules from shift_types.csv". Add one only with a clear yes.
-5. Run `.venv/bin/python scripts/run_my_schedule.py`. Fix every error the data check reports before the solve. Report the result as in section 3.
+5. Run `python3 scripts/py scripts/run_my_schedule.py`. Fix every error the data check reports before the solve. Report the result as in section 3.
 6. Call `get_practice_overview`. Save the whole result as JSON to `output/postcallmd_overview.json`. Its `shift_types` array carries the ids.
-7. Run `.venv/bin/python scripts/to_postcallmd_draft.py --overview output/postcallmd_overview.json`. It reads the solver output named in `config/my_rules.json` and writes `output/postcallmd_draft.json`. It stops on a shift code with no id.
+7. Run `python3 scripts/py scripts/to_postcallmd_draft.py --overview output/postcallmd_overview.json --month YYYY-MM`. It reads the solver output named in `config/my_rules.json` and writes `output/postcallmd_draft.json`. It stops on a shift code with no id.
 8. Call `submit_schedule_draft` with `start_date`, `end_date`, `mode` and `assignments` taken from that file. `mode` is `fill_empty`: it adds entries and skips cells that already hold one.
 9. Report `created`, `skipped` and `apply_findings` from the response, plus the call count per clinician that the draft script printed. If `skipped` is not zero, say which cells the app already had.
 10. Ask the person to review the draft in the app. After they confirm it, call `save_solver` once. Send `config/my_rules.json`, every repo file you changed (for example `solver.py` after a cookbook rule), the rules as numbered plain sentences in `rules_text`, these steps as `run_instructions`, and the month as `source_draft_month`. The next month then starts from the stored solver.
