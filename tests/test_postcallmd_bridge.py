@@ -79,16 +79,88 @@ def test_from_postcallmd_writes_every_file_and_the_config():
         assert cfg["rules"]["weights"]["target_deviation"] == 100
 
 
-def test_from_postcallmd_keeps_an_existing_config():
+def test_from_postcallmd_keeps_an_existing_config_but_sets_the_month():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         config = root / "config" / "my_rules.json"
         config.parent.mkdir()
-        config.write_text(json.dumps({"input_dir": "data/my_data", "output_csv": "output/x.csv", "rules": {}}))
+        rules = {"weights": {"target_deviation": 7}}
+        config.write_text(json.dumps({"input_dir": "data/my_data", "output_csv": "output/x.csv", "rules": rules}))
         _, _, result = import_export(root)
         check(result)
-        assert "Kept the existing" in result.stdout
-        assert json.loads(config.read_text())["output_csv"] == "output/x.csv"
+        assert f"Updated {config} for month 2026-06" in result.stdout
+        assert "output_csv was output/x.csv" in result.stdout
+        cfg = json.loads(config.read_text())
+        assert cfg["output_csv"] == "output/schedule_2026-06.csv"
+        assert cfg["rules"] == rules, "the other keys of an existing config are kept"
+
+
+def write_export(root: Path, export: dict) -> Path:
+    path = root / "export.json"
+    path.write_text(json.dumps(export))
+    return path
+
+
+def test_from_postcallmd_names_the_output_after_the_month_on_every_run():
+    export = json.loads(EXPORT.read_text())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir, config, result = import_export(root)
+        check(result)
+        assert json.loads(config.read_text())["output_csv"] == "output/schedule_2026-06.csv"
+
+        july = dict(export, coverage_csv=export["coverage_csv"].replace("2026-06-", "2026-07-"))
+        rerun = run(FROM_SCRIPT, write_export(root, july), "--data-dir", data_dir, "--config", config)
+        check(rerun)
+        assert json.loads(config.read_text())["output_csv"] == "output/schedule_2026-07.csv"
+        assert "output_csv was output/schedule_2026-06.csv" in rerun.stdout
+
+
+def test_from_postcallmd_stops_on_more_than_one_month():
+    export = json.loads(EXPORT.read_text())
+    export["coverage_csv"] = export["coverage_csv"].replace("2026-06-14,OB Call", "2026-07-14,OB Call")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", root / "d", "--config", root / "c" / "r.json")
+        check(result, 2)
+        assert "spans more than one month (2026-06, 2026-07)" in result.stderr
+        assert not (root / "d").exists()
+
+
+def test_from_postcallmd_stops_on_an_input_dir_mismatch_unless_forced():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        config = root / "config" / "my_rules.json"
+        config.parent.mkdir()
+        config.write_text(json.dumps({"input_dir": "data/other", "output_csv": "output/x.csv", "rules": {}}))
+        data_dir, _, result = import_export(root)
+        check(result, 2)
+        assert f"reads {root / 'data' / 'other'}, not {data_dir}." in result.stderr
+        assert "Nothing was written" in result.stderr
+        assert not data_dir.exists(), "nothing may be written on a mismatch"
+        assert json.loads(config.read_text())["input_dir"] == "data/other"
+
+        forced = run(FROM_SCRIPT, EXPORT, "--data-dir", data_dir, "--config", config, "--force")
+        check(forced)
+        assert (data_dir / "coverage.csv").exists()
+        assert json.loads(config.read_text())["input_dir"] == "data/my_data"
+        assert "input_dir now points at data/my_data (--force)" in forced.stdout
+
+
+def test_from_postcallmd_writes_blocking_notes_through_and_flags_them():
+    export = json.loads(EXPORT.read_text())
+    export["notes_txt"] += (
+        "\nblocking\n"
+        "BLOCKING: OB Call has weekend_block, and the stored solver does not keep it.\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir = root / "data" / "my_data"
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", root / "config" / "r.json")
+        check(result)
+        assert (data_dir / "notes.txt").read_text() == export["notes_txt"]
+        assert "STOP: the export has 1 BLOCKING line(s)" in result.stdout
+        assert "  BLOCKING: OB Call has weekend_block" in result.stdout
 
 
 def test_from_postcallmd_fails_on_a_missing_key():

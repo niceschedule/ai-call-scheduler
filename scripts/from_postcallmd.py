@@ -9,13 +9,26 @@ Output, in the data folder (data/my_data by default):
 
     clinicians.csv  coverage.csv  requests.csv  history.csv
     shift_types.csv (the solver does not read it; the cookbook rules do)
-    notes.txt       (the export's notes, also printed below)
+    notes.txt       (the export's notes, unchanged, also printed below)
 
 Also config/my_rules.json, copied from config/my_rules.template.json when it
-does not exist yet. An existing config is left as it is.
+does not exist yet. On every run, output_csv in the config is set to
+output/schedule_YYYY-MM.csv for the month of coverage.csv, so a rerun for a
+new month never writes over the last month's schedule. The other keys of an
+existing config are kept.
 
-Nothing in the export is dropped. A missing key, an empty file or a file
-without the columns the solver needs stops the script with a message.
+The script stops before it writes anything when:
+
+* a key is missing, a file is empty, or a file lacks a column the solver
+  needs;
+* coverage.csv has no rows, or rows in more than one month;
+* the existing config reads another folder (input_dir) than --data-dir.
+  Pass --force to point input_dir at --data-dir.
+
+Nothing in the export is dropped. notes.txt may have a "blocking" section
+with lines that start with "BLOCKING:". Each one is a rule the solver cannot
+keep. The script prints them, and scripts/to_postcallmd_draft.py refuses to
+write a draft while any is there.
 
     .venv/bin/python scripts/from_postcallmd.py export.json
 """
@@ -26,6 +39,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -131,32 +145,36 @@ def csv_rows(text: str) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(text.lstrip("﻿"))))
 
 
-def month_of(coverage_csv: str) -> str | None:
-    """YYYY-MM of the first coverage row, for the output file name."""
-    for row in csv_rows(coverage_csv):
-        value = (row.get("date") or "").strip()
-        if len(value) >= 7:
-            return value[:7]
-    return None
+def months_of(coverage_csv: str) -> list[str]:
+    """Every YYYY-MM that a coverage row falls in, sorted."""
+    return sorted(
+        {
+            (row.get("date") or "").strip()[:7]
+            for row in csv_rows(coverage_csv)
+            if re.match(r"\d{4}-\d{2}", (row.get("date") or "").strip())
+        }
+    )
 
 
-def create_config(
-    config_path: Path, template_path: Path, data_dir: Path, month: str | None
-) -> dict:
-    with template_path.open() as f:
-        config = json.load(f)
-    base_dir = config_path.parent.parent
+def config_input_dir(config_path: Path, data_dir: Path) -> str:
+    """input_dir for the config: relative to the config's base folder when
+    the data folder is inside it, else absolute."""
     try:
-        config["input_dir"] = str(data_dir.relative_to(base_dir))
+        return data_dir.relative_to(config_path.parent.parent).as_posix()
     except ValueError:
-        config["input_dir"] = str(data_dir)
-    if month:
-        config["output_csv"] = f"output/schedule_{month}.csv"
+        return str(data_dir)
+
+
+def write_config(config_path: Path, config: dict) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with config_path.open("w") as f:
         json.dump(config, f, indent=2)
         f.write("\n")
-    return config
+
+
+def blocking_lines(notes_txt: str) -> list[str]:
+    """Lines of the export's notes that start with BLOCKING:."""
+    return [line.strip() for line in notes_txt.splitlines() if line.lstrip().startswith("BLOCKING:")]
 
 
 def flag_lines(shift_types_csv: str) -> list[str]:
@@ -196,6 +214,11 @@ def main() -> int:
         default="config/my_rules.template.json",
         help="Template for a new rules file. Defaults to config/my_rules.template.json.",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="When the existing config reads another folder, point it at --data-dir.",
+    )
     args = parser.parse_args()
 
     export_path = resolve_path(root, args.export_json)
@@ -228,14 +251,56 @@ def main() -> int:
         lacking = [c for c in REQUIRED_COLUMNS[filename] if c not in header]
         if lacking:
             problems.append(f"{filename} lacks columns: {', '.join(lacking)}")
-    if not csv_rows(export["coverage_csv"]):
-        problems.append("coverage.csv has no rows, so there is nothing to schedule")
+    months: list[str] = []
+    if not problems:
+        months = months_of(export["coverage_csv"])
+        if not csv_rows(export["coverage_csv"]):
+            problems.append("coverage.csv has no rows, so there is nothing to schedule")
+        elif not months:
+            problems.append("coverage.csv has no dates in YYYY-MM-DD form")
+        elif len(months) > 1:
+            problems.append(
+                "coverage.csv spans more than one month (" + ", ".join(months) + "). "
+                "Export one month at a time."
+            )
     if problems:
         for p in problems:
             print(f"from_postcallmd: {p}", file=sys.stderr)
         return 2
+    month = months[0]
+    output_csv = f"output/schedule_{month}.csv"
 
     data_dir = resolve_path(root, args.data_dir)
+    config_path = resolve_path(root, args.config)
+    template_path = resolve_path(root, args.template)
+
+    # Read or create the config before anything is written, so a mismatch
+    # stops the run with the data folder untouched.
+    config_created = False
+    input_dir_moved = False
+    if config_path.exists():
+        with config_path.open() as f:
+            config = json.load(f)
+        configured_dir = resolve_path(config_path.parent.parent, config.get("input_dir", ""))
+        if configured_dir.resolve() != data_dir.resolve():
+            if not args.force:
+                return fail(
+                    f"{display_path(root, config_path)} reads "
+                    f"{display_path(root, configured_dir)}, not {display_path(root, data_dir)}. "
+                    "Nothing was written. Pass the same folder with --data-dir, or pass --force "
+                    "to point the config at --data-dir."
+                )
+            config["input_dir"] = config_input_dir(config_path, data_dir)
+            input_dir_moved = True
+    else:
+        if not template_path.exists():
+            return fail(f"no template at {template_path}; cannot create {config_path}")
+        with template_path.open() as f:
+            config = json.load(f)
+        config["input_dir"] = config_input_dir(config_path, data_dir)
+        config_created = True
+    previous_output = config.get("output_csv")
+    config["output_csv"] = output_csv
     data_dir.mkdir(parents=True, exist_ok=True)
     written: list[tuple[str, int]] = []
     for key in EXPORT_KEYS:
@@ -247,17 +312,7 @@ def main() -> int:
         count = len(csv_rows(text)) if filename.endswith(".csv") else len(text.splitlines())
         written.append((filename, count))
 
-    config_path = resolve_path(root, args.config)
-    template_path = resolve_path(root, args.template)
-    config_created = False
-    if config_path.exists():
-        with config_path.open() as f:
-            config = json.load(f)
-    else:
-        if not template_path.exists():
-            return fail(f"no template at {template_path}; cannot create {config_path}")
-        config = create_config(config_path, template_path, data_dir, month_of(export["coverage_csv"]))
-        config_created = True
+    write_config(config_path, config)
 
     print(f"Wrote {display_path(root, data_dir)}/:")
     for filename, count in written:
@@ -268,19 +323,17 @@ def main() -> int:
     if config_created:
         print(
             f"Created {display_path(root, config_path)} from "
-            f"{display_path(root, template_path)}. Output goes to {config['output_csv']}."
+            f"{display_path(root, template_path)}. Month {month}, output goes to {output_csv}."
         )
     else:
         print(
-            f"Kept the existing {display_path(root, config_path)}. "
-            f"It reads {config.get('input_dir')} and writes {config.get('output_csv')}."
+            f"Updated {display_path(root, config_path)} for month {month}. "
+            f"It reads {config.get('input_dir')} and writes {output_csv}."
         )
-    configured_dir = resolve_path(config_path.parent.parent, config.get("input_dir", ""))
-    if configured_dir.resolve() != data_dir.resolve():
-        print(
-            f"Warning: the config reads {display_path(root, configured_dir)}, "
-            f"not {display_path(root, data_dir)}. Change input_dir or pass --data-dir."
-        )
+        if previous_output and previous_output != output_csv:
+            print(f"  output_csv was {previous_output}. That file is kept.")
+        if input_dir_moved:
+            print(f"  input_dir now points at {config['input_dir']} (--force).")
 
     flags = flag_lines(export["shift_types_csv"])
     if flags:
@@ -295,6 +348,16 @@ def main() -> int:
     print("-" * 60)
     print(export["notes_txt"].rstrip("\n"))
     print("-" * 60)
+    blocking = blocking_lines(export["notes_txt"])
+    if blocking:
+        print()
+        print(
+            f"STOP: the export has {len(blocking)} BLOCKING line(s). The solver cannot keep "
+            "these rules, so scripts/to_postcallmd_draft.py will not write a draft:"
+        )
+        for line in blocking:
+            print(f"  {line}")
+        print("Tell the admin about each line. Fix the rule in the app or in the solver, then export again.")
     print()
     print("Next:")
     print(f"  .venv/bin/python scripts/check_my_data.py --config {display_path(root, config_path)}")
