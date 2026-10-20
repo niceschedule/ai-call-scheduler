@@ -18,6 +18,8 @@ then installs requirements.txt. Later runs skip both steps.
 Options, before the command:
 
     --setup    make the venv and install, then stop
+    --dev      also install requirements-dev.txt (pytest), for the tests:
+               python3 scripts/py --dev -m pytest tests/
     --where    print the path of the venv's Python, then stop
 
 The file has no .py ending on purpose, so no "import py" can load it.
@@ -33,7 +35,7 @@ from pathlib import Path
 MIN_PYTHON = (3, 9)
 REPO = Path(__file__).resolve().parent.parent
 VENV = REPO / ".venv"
-OPTIONS = {"--setup", "--where", "-h", "--help"}
+OPTIONS = {"--setup", "--dev", "--where", "-h", "--help"}
 
 
 def venv_python() -> Path:
@@ -72,7 +74,7 @@ def pip_install(python: Path, requirements: str) -> None:
     )
 
 
-def ensure_venv() -> Path:
+def ensure_venv(dev: bool) -> Path:
     python = venv_python()
     if not python.exists():
         if sys.version_info < MIN_PYTHON:
@@ -86,6 +88,8 @@ def ensure_venv() -> Path:
         subprocess.run([sys.executable, "-m", "venv", "--clear", str(VENV)], check=True)
     if not can_import(python, "ortools"):
         pip_install(python, "requirements.txt")
+    if dev and not can_import(python, "pytest"):
+        pip_install(python, "requirements-dev.txt")
     return python
 
 
@@ -96,12 +100,12 @@ def main(argv: list[str]) -> int:
     if flags & {"-h", "--help"}:
         print(__doc__)
         return 0
-    if not argv and not flags & {"--setup", "--where"}:
+    if not argv and not flags & {"--setup", "--dev", "--where"}:
         say("name a command to run, for example: scripts/py solver.py")
         return 2
 
     try:
-        python = ensure_venv()
+        python = ensure_venv(dev="--dev" in flags)
     except subprocess.CalledProcessError as exc:
         say(f"setup failed (exit {exc.returncode}). Delete .venv and run the command again.")
         return exc.returncode or 1

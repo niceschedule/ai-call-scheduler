@@ -1,0 +1,135 @@
+{
+  "sites": [
+    {
+      "id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "code": "MAIN",
+      "name": "Main Hospital"
+    }
+  ],
+  "shift_types": [
+    {
+      "id": "eda970f4-16f3-53dd-b06f-090bf0dc5b03",
+      "code": "OR Call",
+      "name": "OR Call",
+      "category": "call",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#1d4ed8"
+    },
+    {
+      "id": "c4af72f2-25c8-50ba-bb8e-9cfd37874017",
+      "code": "OB Call",
+      "name": "OB Call",
+      "category": "call",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#be185d"
+    },
+    {
+      "id": "0926d856-a829-5303-9c79-f78ac21b3541",
+      "code": "Night Call",
+      "name": "Night Call",
+      "category": "call",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#7c3aed"
+    },
+    {
+      "id": "9ed995f5-c8d1-58e4-a151-636b81afb2c3",
+      "code": "AM Room",
+      "name": "AM Room",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "a4fcbb05-e73a-526e-bdc5-0387145c6925",
+      "code": "PM Room",
+      "name": "PM Room",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "2cd515ef-3f8d-5576-b470-bd2efedf5218",
+      "code": "Pain Clinic",
+      "name": "Pain Clinic",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "1bb19d64-6cc3-5d16-adb8-01b41398dfaa",
+      "code": "Pre-op",
+      "name": "Pre-op",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "f2139ecf-ab60-5648-add6-cb7f029dfd40",
+      "code": "Endo",
+      "name": "Endo",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "bc597b1e-dd83-5dda-bc78-77ffc9131543",
+      "code": "Admin Day",
+      "name": "Admin Day",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    },
+    {
+      "id": "5c7be07e-2277-505b-a7bd-d9dc32eb82ae",
+      "code": "Cardiac",
+      "name": "Cardiac",
+      "category": "daily",
+      "facility_id": "e8684f13-a2d1-5f36-abd7-18c37b365fff",
+      "active": true,
+      "post_call_ok": true,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#0f766e"
+    }
+  ],
+  "periods": [],
+  "request_types": [],
+  "settings": {},
+  "stored_solvers": []
+}

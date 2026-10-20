@@ -5,7 +5,7 @@ The tests need .venv, so run scripts/quickstart.py (or scripts/py --setup)
 first, as CI does. Without .venv they stop with a message instead of making
 one, because a first setup downloads OR-Tools.
 
-    python3 scripts/py -m pytest tests/
+    python3 scripts/py --dev -m pytest tests/
     python3 scripts/py tests/test_launcher.py   (stdlib only)
 """
 

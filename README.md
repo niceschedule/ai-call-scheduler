@@ -111,11 +111,13 @@ Claude Code users also get a packaged skill, [`.claude/skills/call-schedule/SKIL
 
 ## Tests
 
-A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files — the same check CI runs on every push:
+A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files. The other tests cover the PostCallMD bridge scripts, the cookbook rules and the launcher. CI runs all of them on Linux, macOS and Windows with Python 3.9 and 3.12:
 
 ```bash
-python tests/smoke_test.py
+python3 scripts/py --dev -m pytest tests/
 ```
+
+On Windows, use `py -3` in place of `python3`. `--dev` installs `requirements-dev.txt` (pytest) into `.venv` the first time. Each test file also runs without pytest, for example `python3 scripts/py tests/smoke_test.py`.
 
 ## Known limitations
 

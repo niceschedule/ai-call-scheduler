@@ -6,7 +6,7 @@ output into the submit_schedule_draft arguments. The fixtures are
 data/sample with app UUIDs and the app's shift codes ("OR Call"), plus a
 get_practice_overview result with shift-type ids.
 
-    .venv/bin/python -m pytest tests/
+    python3 scripts/py --dev -m pytest tests/
     python tests/test_postcallmd_bridge.py   (stdlib only, as in CI)
 """
 

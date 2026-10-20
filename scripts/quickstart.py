@@ -7,7 +7,8 @@
 It makes .venv and installs OR-Tools when they are missing (scripts/py does
 this), solves the built-in sample, and opens output/sample_schedule.html.
 A second run skips the install. Pass --no-open to skip the browser, for
-example in CI. scripts/quickstart.sh runs this file.
+example in CI. Pass --dev to also install pytest for the tests.
+scripts/quickstart.sh runs this file.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0
 
-    setup = subprocess.call([sys.executable, str(LAUNCHER), "--setup"])
+    dev = ["--dev"] if "--dev" in argv else []
+    setup = subprocess.call([sys.executable, str(LAUNCHER), "--setup", *dev])
     if setup != 0:
         return setup
 

@@ -25,6 +25,12 @@ The script stops before it writes anything when:
 * the existing config reads another folder (input_dir) than --data-dir.
   Pass --force to point input_dir at --data-dir.
 
+A history row for a clinician who is not an active row of clinicians.csv,
+for example someone who left the practice, would stop the data check and
+the solver. The script moves such rows to history_unmatched.csv, names
+them, and keeps the rest in history.csv. The solver does not read the
+moved rows. They cannot change anyone's fairness this month.
+
 Nothing in the export is dropped. notes.txt may have a "blocking" section
 with lines that start with "BLOCKING:". Each one is a rule the solver cannot
 keep. The script prints them, and scripts/to_postcallmd_draft.py refuses to
@@ -178,6 +184,40 @@ def write_config(config_path: Path, config: dict) -> None:
         f.write("\n")
 
 
+def split_history(history_csv: str, clinicians_csv: str) -> tuple[str, str | None, list[str]]:
+    """Split history into rows for active clinicians and the rest. Returns
+    the history text, the unmatched text (None when every row matches) and
+    one line per unknown clinician."""
+    known = {
+        (row.get("clinician_id") or "").strip()
+        for row in csv_rows(clinicians_csv)
+        if (row.get("active") or "1").strip().lower() in {"1", "true", "yes", "y"}
+    }
+    known |= {(row.get("name") or "").strip() for row in csv_rows(clinicians_csv)
+              if (row.get("clinician_id") or "").strip() in known}
+    header = csv_header(history_csv)
+    matched: list[dict[str, str]] = []
+    unmatched: list[dict[str, str]] = []
+    for row in csv_rows(history_csv):
+        (matched if (row.get("clinician_id") or "").strip() in known else unmatched).append(row)
+    if not unmatched:
+        return history_csv, None, []
+
+    def render(rows: list[dict[str, str]]) -> str:
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=header, lineterminator="\n", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        return out.getvalue()
+
+    counts: dict[str, int] = {}
+    for row in unmatched:
+        key = (row.get("clinician_id") or "").strip() or "(blank)"
+        counts[key] = counts.get(key, 0) + 1
+    lines = [f"  {key}: {n} row(s)" for key, n in sorted(counts.items())]
+    return render(matched), render(unmatched), lines
+
+
 def blocking_lines(notes_txt: str) -> list[str]:
     """Lines of the export's notes that start with BLOCKING:."""
     return [line.strip() for line in notes_txt.splitlines() if line.lstrip().startswith("BLOCKING:")]
@@ -308,10 +348,14 @@ def main() -> int:
     previous_output = config.get("output_csv")
     config["output_csv"] = output_csv
     data_dir.mkdir(parents=True, exist_ok=True)
+    history_text, unmatched_text, unmatched_lines = split_history(
+        export["history_csv"], export["clinicians_csv"]
+    )
+    unmatched_path = data_dir / "history_unmatched.csv"
     written: list[tuple[str, int]] = []
     for key in EXPORT_KEYS:
         filename = key[: -len("_csv")] + ".csv" if key.endswith("_csv") else "notes.txt"
-        text = export[key]
+        text = history_text if key == "history_csv" else export[key]
         if not text.endswith("\n"):
             text += "\n"
         # open(newline="") keeps the export's line endings. Path.write_text
@@ -320,6 +364,12 @@ def main() -> int:
             f.write(text)
         count = len(csv_rows(text)) if filename.endswith(".csv") else len(text.splitlines())
         written.append((filename, count))
+    if unmatched_text is not None:
+        with unmatched_path.open("w", encoding="utf-8", newline="") as f:
+            f.write(unmatched_text)
+        written.append((unmatched_path.name, len(csv_rows(unmatched_text))))
+    elif unmatched_path.exists():
+        unmatched_path.unlink()  # left from an earlier month
 
     write_config(config_path, config)
 
@@ -329,6 +379,13 @@ def main() -> int:
         print(f"  {filename:<16} {count:>4} {unit}")
     if extra:
         print("Keys in the export that this script does not use: " + ", ".join(extra))
+    if unmatched_lines:
+        print(
+            "History rows for clinicians who are not active in clinicians.csv were moved "
+            f"to {unmatched_path.name}. The solver does not read them:"
+        )
+        for line in unmatched_lines:
+            print(line)
     if config_created:
         print(
             f"Created {display_path(root, config_path)} from "
