@@ -81,7 +81,7 @@ Some users come through the PostCallMD MCP server instead of the walkthrough. Yo
 - A lasting change to a person's targets or eligibility belongs in the app (`update_clinician`, `set_clinician_eligibility`), followed by a new export. A change for one month only may stay in the CSV. Say so in the report, because the next export overwrites it.
 - Still run the sample first, so the user sees a schedule before you touch their data.
 - The steps that send the schedule back are in the skill file, section "Publish to PostCallMD": the draft script, `submit_schedule_draft` in `fill_empty` mode, the `apply_findings` report, and `save_solver` after the admin confirms. Never publish. The admin publishes in the app.
-- A line in the export's notes that starts with `BLOCKING:` names a rule the solver cannot keep. Stop there. Tell the admin each line in plain words. The draft script refuses to write a draft while such a line is in `data/my_data/notes.txt`.
+- A line in the export's notes that starts with `BLOCKING:` names a rule the solver may not keep. The draft script refuses to write a draft while such a line is in `data/my_data/notes.txt`. For a `must_on` or `must_off` line, stop and tell the admin in plain words: the fix is in the app. For a shift-type line (`next_day_off`, `weekend_block`, `post_call_ok`), offer to add the rule from the cookbook. After a clear yes, add it, solve, and list its token in `enforces` in `config/my_rules.json`. The cookbook section "Tell the draft script" has the details.
 
 ### Each month on the app route
 

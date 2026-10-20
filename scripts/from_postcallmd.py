@@ -261,6 +261,11 @@ def main() -> int:
         help="Template for a new rules file. Defaults to config/my_rules.template.json.",
     )
     parser.add_argument(
+        "--solver",
+        default="solver.py",
+        help="The solver to check for the rules in enforces. Defaults to solver.py.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="When the existing config reads another folder, point it at --data-dir.",
@@ -414,16 +419,32 @@ def main() -> int:
     print("-" * 60)
     print(export["notes_txt"].rstrip("\n"))
     print("-" * 60)
-    blocking = blocking_lines(export["notes_txt"])
+    # The same check the draft script makes, so the STOP line names only
+    # what will really stop the draft.
+    from to_postcallmd_draft import split_blocking
+
+    solver_path = resolve_path(root, args.solver)
+    solver_text = solver_path.read_text(encoding="utf-8") if solver_path.exists() else ""
+    enforces = config.get("enforces") if isinstance(config.get("enforces"), list) else []
+    blocking, cleared, _ = split_blocking(blocking_lines(export["notes_txt"]), enforces, solver_text)
+    if cleared:
+        print()
+        print(f"BLOCKING lines that solver.py keeps (enforces in {display_path(root, config_path)}):")
+        for line in cleared:
+            print(f"  {line}")
     if blocking:
         print()
         print(
-            f"STOP: the export has {len(blocking)} BLOCKING line(s). The solver cannot keep "
+            f"STOP: the export has {len(blocking)} BLOCKING line(s). The solver may not keep "
             "these rules, so scripts/to_postcallmd_draft.py will not write a draft:"
         )
         for line in blocking:
             print(f"  {line}")
-        print("Tell the admin about each line. Fix the rule in the app or in the solver, then export again.")
+        print(
+            "Tell the admin about each line. A must_on or must_off line needs a change in the app. "
+            "A shift-type line clears when solver.py has the rule from docs/adaptation-cookbook.md "
+            'and config/my_rules.json lists its token in "enforces".'
+        )
     print()
     print("Next:")
     print(f"  {launcher()} scripts/check_my_data.py --config {display_path(root, config_path)}")

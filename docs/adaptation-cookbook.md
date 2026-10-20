@@ -180,6 +180,16 @@ Entries 6 and 7 make an exception for the Saturday and Sunday of a weekend block
 
 One fact to know first: with `min_days_between_assignments` of 1 or more, which is the template default, no clinician works two days in a row anyway. Entries 6 and 7 change the schedule only when a group sets the rest gap to 0, so that people may work back to back except where a flag forbids it. Entry 5 needs the rest rule to make one exception, and shows how.
 
+### Tell the draft script
+
+The PostCallMD export writes one `BLOCKING:` line for each shift type that carries a flag, because the app cannot know what your solver keeps. `scripts/to_postcallmd_draft.py` refuses to write a draft while such a line is in `notes.txt`. After you install a rule and a solve shows that it holds, list its token in `config/my_rules.json`:
+
+```json
+"enforces": ["weekend_block", "next_day_off", "post_call_ok"]
+```
+
+The draft script then clears the lines for those tokens. It clears a line only when `solver.py` also has the names this cookbook's code uses for the rule, so a config entry alone clears nothing. Send `config/my_rules.json` and `solver.py` with `save_solver`, so the next month starts with both. A `must_on` or `must_off` line never clears this way: the export does not carry the request, so no solver can keep it.
+
 `tests/test_cookbook.py` applies these code blocks to a copy of `solver.py` and solves the sample with each entry, and with all three together.
 
 ### Shared helper: read the flags

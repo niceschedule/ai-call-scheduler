@@ -50,6 +50,7 @@ for code, color in call_types:
 
 notes = "\n".join([
     "PostCallMD solver export for Matrix Test Practice, month 2026-08, scope call.",
+    "blocking: none",
     "Scope: call. Daily shift types are left out of every file. Daily shifts stay in Daily Staffing in the app.",
     "shift_types.csv lists each shift type in the files with its rules: post_call_ok, next_day_off, weekend_block and color. The open-source solver does not read this file. Read it before you adapt the solver.",
     "clinician_id is the PostCallMD clinician UUID. name is the display name.",

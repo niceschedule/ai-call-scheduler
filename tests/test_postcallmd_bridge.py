@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,6 +56,32 @@ def import_export(root: Path) -> tuple[Path, Path, subprocess.CompletedProcess]:
     return data_dir, config, result
 
 
+def unblock(data_dir: Path) -> None:
+    """Make notes.txt look like an export with nothing to block, so a draft
+    test reaches the check it is about."""
+    notes = data_dir / "notes.txt"
+    lines = notes.read_text().splitlines()
+    kept = [line for line in lines if not line.startswith("BLOCKING:")]
+    notes.write_text("\n".join("blocking: none" if line == "blocking:" else line for line in kept) + "\n")
+
+
+def cookbook_solver(root: Path) -> Path:
+    """solver.py with the three cookbook rules, written into root."""
+    sys.path.insert(0, str(REPO / "tests"))
+    from test_cookbook import patched_solver
+
+    path = root / "solver.py"
+    path.write_text(patched_solver(["weekend-block", "next-day-off", "post-call-ok"]), encoding="utf-8")
+    shutil.copy(REPO / "schedule_html.py", root / "schedule_html.py")
+    return path
+
+
+def set_enforces(config: Path, tokens: list[str]) -> None:
+    cfg = json.loads(config.read_text())
+    cfg["enforces"] = tokens
+    config.write_text(json.dumps(cfg))
+
+
 def test_from_postcallmd_writes_every_file_and_the_config():
     export = json.loads(EXPORT.read_text())
     with tempfile.TemporaryDirectory() as tmp:
@@ -71,6 +98,7 @@ def test_from_postcallmd_writes_every_file_and_the_config():
         assert "Notes from the export" in result.stdout
         assert "prefer_on" in result.stdout
         assert "OB Call: next_day_off, weekend_block, post_call_ok=0" in result.stdout
+        assert "STOP: the export has 5 BLOCKING line(s)" in result.stdout
         # Config from the template, pointed at the data and a dated output.
         assert config.exists()
         cfg = json.loads(config.read_text())
@@ -159,7 +187,7 @@ def test_from_postcallmd_writes_blocking_notes_through_and_flags_them():
         result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", root / "config" / "r.json")
         check(result)
         assert (data_dir / "notes.txt").read_text() == export["notes_txt"]
-        assert "STOP: the export has 1 BLOCKING line(s)" in result.stdout
+        assert "STOP: the export has 6 BLOCKING line(s)" in result.stdout
         assert "  BLOCKING: OB Call has weekend_block" in result.stdout
 
 
@@ -200,7 +228,9 @@ def test_from_postcallmd_unwraps_a_client_wrapper():
 
 
 def test_export_solves_optimal_and_round_trips_to_a_draft():
-    """The whole app route: import, data check, solve, draft."""
+    """The whole app route: import, data check, solve, draft. The fixture's
+    shift types carry all three flags, so the stock solver is blocked, and
+    the cookbook solver with enforces gets through."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         data_dir, config, result = import_export(root)
@@ -213,13 +243,39 @@ def test_export_solves_optimal_and_round_trips_to_a_draft():
         assert "Status: OPTIMAL" in solve.stdout, solve.stdout
         schedule = root / "output" / "schedule_2026-06.csv"
         assert schedule.exists()
+
+        # The stock solver keeps none of the flags, so the gate holds.
+        draft_path = root / "output" / "draft.json"
+        blocked = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path)
+        check(blocked, 2)
+        assert "5 BLOCKING line(s)" in blocked.stderr
+        assert not draft_path.exists()
+
+        # enforces alone clears nothing: solver.py lacks the rules.
+        set_enforces(config, ["weekend_block", "next_day_off", "post_call_ok"])
+        claimed = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path)
+        check(claimed, 2)
+        assert "weekend_block is in enforces, but solver.py lacks" in claimed.stderr
+        assert not draft_path.exists()
+
+        # The cookbook solver keeps all three, so the lines clear.
+        solver = cookbook_solver(root)
+        solve = run(solver, "--config", config)
+        check(solve)
         schedule_rows = rows(schedule)
         assert len(schedule_rows) == len(rows(data_dir / "coverage.csv"))
         assert {r["shift_type"] for r in schedule_rows} == {"OR CALL", "OB CALL"}
 
-        draft_path = root / "output" / "draft.json"
-        draft_run = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path)
+        draft_run = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--solver", solver, "--out", draft_path)
         check(draft_run)
+        assert "BLOCKING lines cleared" in draft_run.stdout
+        assert draft_run.stdout.count("  BLOCKING: ") == 5
+
+        # Next month's import makes the same check, so it says no STOP.
+        again = run(FROM_SCRIPT, EXPORT, "--data-dir", data_dir, "--config", config, "--solver", solver)
+        check(again)
+        assert "STOP" not in again.stdout
+        assert "BLOCKING lines that solver.py keeps" in again.stdout
         draft = json.loads(draft_path.read_text())
         assert draft["mode"] == "fill_empty"
         # Calendar bounds of the month, not the first and last assignment.
@@ -243,8 +299,32 @@ def test_export_solves_optimal_and_round_trips_to_a_draft():
 
         # A rerun for the same month writes the same file, byte for byte.
         first = draft_path.read_bytes()
-        check(run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path))
+        check(run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--solver", solver, "--out", draft_path))
         assert draft_path.read_bytes() == first
+
+
+def test_enforces_clears_only_the_listed_rules_and_never_a_request():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir, config, result = import_export(root)
+        check(result)
+        solver = cookbook_solver(root)
+        check(run(solver, "--config", config))
+        notes = data_dir / "notes.txt"
+        notes.write_text(
+            notes.read_text()
+            + "BLOCKING: must_on A. Fox 2026-06-20: A. Fox must work on 2026-06-20, and no file carries it.\n"
+        )
+        set_enforces(config, ["weekend_block", "must_on"])
+        out = root / "draft.json"
+        draft_run = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--solver", solver, "--out", out)
+        check(draft_run, 2)
+        # weekend_block clears. next_day_off and post_call_ok (4 lines) and must_on stay.
+        assert "has 5 BLOCKING line(s)" in draft_run.stderr
+        assert "BLOCKING: weekend_block" not in draft_run.stderr
+        assert "BLOCKING: must_on A. Fox" in draft_run.stderr
+        assert "a must_on line cannot be cleared" in draft_run.stderr
+        assert not out.exists()
 
 
 def solved_root(tmp: str) -> tuple[Path, Path, Path]:
@@ -252,6 +332,7 @@ def solved_root(tmp: str) -> tuple[Path, Path, Path]:
     root = Path(tmp)
     data_dir, config, result = import_export(root)
     check(result)
+    unblock(data_dir)
     check(run(REPO / "solver.py", "--config", config))
     return root, data_dir, config
 
@@ -358,6 +439,7 @@ def test_to_postcallmd_draft_fails_on_a_code_with_no_id():
         root = Path(tmp)
         data_dir, config, result = import_export(root)
         check(result)
+        unblock(data_dir)
         check(run(REPO / "solver.py", "--config", config))
         short = root / "overview.json"
         short.write_text(json.dumps(overview))
@@ -381,6 +463,7 @@ def test_to_postcallmd_draft_rejects_slug_ids():
         root = Path(tmp)
         data_dir, _, result = import_export(root)
         check(result)
+        unblock(data_dir)
         ov = root / "overview.json"
         ov.write_text(json.dumps(overview))
         out = root / "draft.json"

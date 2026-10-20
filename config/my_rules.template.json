@@ -1,6 +1,7 @@
 {
   "input_dir": "data/my_data",
   "output_csv": "output/my_schedule.csv",
+  "enforces": [],
   "rules": {
     "min_days_between_assignments_default": 1,
     "preferred_days_between_assignments": 3,

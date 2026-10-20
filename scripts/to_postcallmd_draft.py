@@ -34,12 +34,25 @@ to case or spacing (solver.py writes "OR CALL" for the app's "OR Call").
 
 The script writes nothing and stops when:
 
-* notes.txt has a line that starts with "BLOCKING:". The export writes
-  such a line for a rule the solver cannot keep. The script prints each one.
+* notes.txt has a line that starts with "BLOCKING:" that is not cleared.
+  The export writes such a line for a rule the solver may not keep:
+  "BLOCKING: <token> <subject>: <sentence>". The script prints each one.
 * a clinician_id is not a UUID, or is not an active row in clinicians.csv.
 * a shift code has no active shift type in the overview, or its id is not
   a UUID.
 * an assignment date is outside the month.
+
+A line for a shift-type rule (token next_day_off, weekend_block or
+post_call_ok) is cleared when both hold:
+
+* config/my_rules.json lists the token in "enforces", for example
+  "enforces": ["weekend_block", "next_day_off"].
+* solver.py has the rule from docs/adaptation-cookbook.md. The script looks
+  for the names the cookbook code uses, so a config entry alone clears
+  nothing.
+
+A must_on or must_off line is never cleared. The export does not carry the
+request, so no solver can keep it.
 
     python3 scripts/py scripts/to_postcallmd_draft.py --overview overview.json --month 2026-07
     (Windows: py -3 scripts/py ...)
@@ -60,6 +73,15 @@ from pathlib import Path
 WRAPPER_KEYS = ("structuredContent", "structured_content", "result", "data", "output")
 OUTPUT_COLUMNS = ("date", "shift_type", "clinician_id")
 BLOCKING_PREFIX = "BLOCKING:"
+
+# Shift-type rules a solver can keep, and the names from the cookbook code
+# that must be in solver.py before "enforces" may clear the rule. Entries 6
+# and 7 depend on entry 5, so they need its names too.
+SOLVER_RULES = {
+    "weekend_block": ("load_shift_flags", "weekend_block_pairs", "block_saturdays"),
+    "next_day_off": ("load_shift_flags", 'get("next_day_off")', "block_saturdays"),
+    "post_call_ok": ("load_shift_flags", 'get("post_call_ok"', "weekend_block_pairs"),
+}
 
 
 def repo_root() -> Path:
@@ -168,6 +190,45 @@ def blocking_lines(notes_path: Path) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.lstrip().startswith(BLOCKING_PREFIX)]
 
 
+def blocking_token(line: str) -> str:
+    """The rule token: the first word after BLOCKING:."""
+    words = line.strip()[len(BLOCKING_PREFIX):].split()
+    return words[0] if words else ""
+
+
+def split_blocking(
+    lines: list[str], enforces: list[str], solver_text: str
+) -> tuple[list[str], list[str], list[str]]:
+    """Split BLOCKING lines into (still blocking, cleared, reasons). A line
+    is cleared only when its token is a solver rule, the config lists it in
+    enforces, and solver.py has the cookbook code for it."""
+    kept: list[str] = []
+    cleared: list[str] = []
+    reasons: list[str] = []
+    for line in lines:
+        token = blocking_token(line)
+        if token not in enforces:
+            kept.append(line)
+            continue
+        if token not in SOLVER_RULES:
+            kept.append(line)
+            reasons.append(
+                f"{token} is in enforces, but a {token} line cannot be cleared: "
+                "the export does not carry the request."
+            )
+            continue
+        missing = [name for name in SOLVER_RULES[token] if name not in solver_text]
+        if missing:
+            kept.append(line)
+            reasons.append(
+                f"{token} is in enforces, but solver.py lacks {', '.join(missing)}. "
+                "Add the rule from docs/adaptation-cookbook.md first."
+            )
+            continue
+        cleared.append(line)
+    return kept, cleared, sorted(set(reasons))
+
+
 def read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open(newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -239,6 +300,12 @@ def main() -> int:
         help="The draft month, YYYY-MM. Defaults to the month of coverage.csv.",
     )
     parser.add_argument(
+        "--solver",
+        default="solver.py",
+        help="The solver that made the schedule, checked for the rules in enforces. "
+        "Defaults to solver.py.",
+    )
+    parser.add_argument(
         "--out",
         default="output/postcallmd_draft.json",
         help="Where to write the draft JSON. Defaults to output/postcallmd_draft.json.",
@@ -268,18 +335,26 @@ def main() -> int:
             f"no notes.txt in {display_path(root, data_dir)}. Run scripts/from_postcallmd.py "
             "on the export first, or pass --data-dir."
         )
-    blocking = blocking_lines(notes_path)
+    enforces = config.get("enforces") or []
+    if not isinstance(enforces, list) or not all(isinstance(t, str) for t in enforces):
+        return fail(f'"enforces" in {display_path(root, config_path)} must be a list of tokens')
+    solver_path = resolve_path(root, args.solver)
+    solver_text = solver_path.read_text(encoding="utf-8") if solver_path.exists() else ""
+    blocking, cleared, reasons = split_blocking(blocking_lines(notes_path), enforces, solver_text)
     if blocking:
         print(
             f"to_postcallmd_draft: {display_path(root, notes_path)} has "
-            f"{len(blocking)} BLOCKING line(s). The solver cannot keep these rules:",
+            f"{len(blocking)} BLOCKING line(s). The solver may not keep these rules:",
             file=sys.stderr,
         )
         for line in blocking:
             print(f"  {line}", file=sys.stderr)
+        for reason in reasons:
+            print(f"to_postcallmd_draft: {reason}", file=sys.stderr)
         print(
             "to_postcallmd_draft: nothing was written. Tell the admin about each line. "
-            "Fix the rule in the app or in the solver, then export again.",
+            "Fix the rule in the app, or add it to the solver from "
+            "docs/adaptation-cookbook.md and list its token in enforces in the config.",
             file=sys.stderr,
         )
         return 2
@@ -414,6 +489,10 @@ def main() -> int:
         json.dump(draft, f, indent=2)
         f.write("\n")
 
+    if cleared:
+        print(f"BLOCKING lines cleared, because {display_path(root, solver_path)} keeps the rule (enforces):")
+        for line in cleared:
+            print(f"  {line}")
     print(
         f"Wrote {len(assignments)} assignments for {draft['start_date']} to "
         f"{draft['end_date']} to {display_path(root, out_path)}"
