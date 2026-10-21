@@ -10,7 +10,8 @@
       "weekend_deviation": 35,
       "soft_request_violation": 25,
       "weekday_repeat": 0,
-      "rest_spacing": 5
+      "rest_spacing": 5,
+      "b2b_weekend": 0
     }
   }
 }

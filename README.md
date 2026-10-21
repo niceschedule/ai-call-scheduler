@@ -79,12 +79,17 @@ To adapt it to your own group, the friction-free path is to paste the [agent han
 - Honor hard time-off and locked assignments
 - Cap max shifts and max weekend shifts per clinician
 - Enforce minimum rest between shifts
+- At most one assignment per clinician per day
+- With a `shift_types.csv` (a PostCallMD export writes one): `weekend_block` (one person works Saturday and the Sunday after it), `next_day_off` (the day after the shift is off) and `post_call_ok = 0` (nobody works the shift the day after call). These are set by configuration, not by code. `config/my_rules.template.json` lists them in `enforces`.
+
+`scripts/check_schedule.py` checks every hard rule again on the output. `scripts/run_my_schedule.py` runs it after each solve.
 
 **Soft preferences** (balanced against each other in the objective):
 
 - Hit per-clinician shift and weekend targets
 - Balance against recent call history
 - Spread weekday patterns over time
+- Avoid the same clinician on two weekends in a row
 - Prefer more rest when feasible
 
 **Request types** in `requests.csv`: `vacation`, `no_call`, `prefer_off`, `lock`.
@@ -93,7 +98,7 @@ Worked examples for adapting it to a real group — holiday rotation, partner al
 
 ## How it works
 
-A small CP-SAT model in [`solver.py`](solver.py) reads four CSVs from `data/sample/` — `clinicians`, `coverage`, `requests`, `history` — and writes an assignment list plus a printable HTML grid to `output/`. The solve is reproducible per (year, month) seed.
+A small CP-SAT model in [`solver.py`](solver.py) reads four CSVs from `data/sample/` — `clinicians`, `coverage`, `requests`, `history` — plus an optional `shift_types.csv` with the shift-type rules, and writes an assignment list plus a printable HTML grid to `output/`. The solve is reproducible per (year, month) seed.
 
 ![Architecture diagram: chief's rules in plain English flow through an AI translator into CSVs, which feed the CP-SAT solver, which writes a printable HTML schedule. The AI never builds the schedule; the solver does.](img/architecture.svg)
 
@@ -111,7 +116,7 @@ Claude Code users also get a packaged skill, [`.claude/skills/call-schedule/SKIL
 
 ## Tests
 
-A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files. The other tests cover the PostCallMD bridge scripts, the cookbook rules and the launcher. CI runs all of them on Linux, macOS and Windows with Python 3.9 and 3.12:
+A smoke test runs the sample solve and checks it reports `OPTIMAL` and writes the schedule files. The other tests cover the PostCallMD bridge scripts, the shift-type rules with the schedule check, and the launcher. CI runs all of them on Linux, macOS and Windows with Python 3.9 and 3.12:
 
 ```bash
 python3 scripts/py --dev -m pytest tests/

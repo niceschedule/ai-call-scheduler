@@ -1,17 +1,24 @@
 {
   "input_dir": "data/my_data",
   "output_csv": "output/my_schedule.csv",
-  "enforces": [],
+  "enforces": [
+    "weekend_block",
+    "next_day_off",
+    "post_call_ok"
+  ],
   "rules": {
     "min_days_between_assignments_default": 1,
     "preferred_days_between_assignments": 3,
+    "history_balance": "target",
+    "avoid_b2b_weekends": true,
     "weights": {
       "target_deviation": 100,
       "history_balance": 40,
       "weekend_deviation": 35,
       "soft_request_violation": 25,
       "weekday_repeat": 20,
-      "rest_spacing": 5
+      "rest_spacing": 5,
+      "b2b_weekend": 40
     }
   }
 }

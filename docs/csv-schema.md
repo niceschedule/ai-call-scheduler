@@ -77,7 +77,28 @@ OR,0000011,1
 | `shift_type` | Yes | Historical shift type. |
 | `status` | No | Example: `final`. Informational in v1. |
 
-History is used only for fairness balancing in v1. It does not block assignments.
+History is used for fairness balancing. The days just before the month also count for the hard rules, so a month does not start against last month's end:
+
+- The minimum rest gap, `next_day_off` and `post_call_ok` read the history rows on the days before the first coverage day.
+- A Sunday on the first day of the month, of a `weekend_block` shift type, goes to the people who worked that shift on the Saturday before, in history. When such a person has a hard request on the Sunday or is not eligible, the solver prints a note and leaves them out.
+
+## `shift_types.csv`
+
+Optional. A PostCallMD export writes it. When it is present, the solver keeps its three flags as hard rules, with no code change, and every shift type in `coverage.csv` needs a row (the solver stops on a missing row, because a missing row would switch its rules off).
+
+| Column | Meaning |
+| --- | --- |
+| `code` | The shift type, as in `coverage.csv`. Letter case does not matter. |
+| `name` | Display name. Not read. |
+| `category` | `call` or `daily`. A row with `call` counts as "on call" for `post_call_ok`. |
+| `post_call_ok` | `0`: a clinician who worked a `call` shift the day before may not work this shift. Blank means `1`. |
+| `next_day_off` | `1`: the clinician has no assignment on the day after this shift. Blank means `0`. |
+| `weekend_block` | `1`: the same clinician works this shift on Saturday and on the Sunday after it. Blank means `0`. Saturday and Sunday must need the same `required_count`. A Saturday or Sunday without its partner row is solved as one day, and the solver prints a note. |
+| `color` | Display color. Not read. |
+
+The Saturday and Sunday of a block are one assignment. So the minimum rest gap, `next_day_off` and `post_call_ok` allow that one pair, and the day off of `next_day_off` follows the Sunday. A block counts as two weekend shifts against `target_weekend_shifts` and `max_weekend_shifts`, so a person needs `max_weekend_shifts` of 2 or more to take one.
+
+`scripts/check_schedule.py` checks these rules, and the other hard rules, on the solver's output.
 
 ## `config/sample_rules.json`
 
@@ -107,13 +128,21 @@ The config file controls where data is read from, where output is written, and t
 | --- | --- |
 | `input_dir` | Directory containing the four CSVs. Relative to the config file. |
 | `output_csv` | Where the solved schedule is written. Relative to the config file. |
-| `enforces` | PostCallMD route only. The shift-type rules this solver keeps: `weekend_block`, `next_day_off`, `post_call_ok`. `scripts/to_postcallmd_draft.py` clears a `BLOCKING:` line for a listed rule only when `solver.py` has that rule from `docs/adaptation-cookbook.md`. The solver does not read this key. |
+| `enforces` | PostCallMD route only. The shift-type rules this solver keeps: `weekend_block`, `next_day_off`, `post_call_ok`. `my_rules.template.json` lists all three. `scripts/to_postcallmd_draft.py` clears a `BLOCKING:` line for a listed rule only when `solver.py` has the code for that rule. The stock `solver.py` has it for all three. The solver does not read this key: it keeps the rules from `shift_types.csv` either way. |
 
 ### `rules.min_days_between_assignments_default`
 
 Hard floor on the rest gap between any clinician's two assignments. Used when `min_days_between_assignments` in `clinicians.csv` is blank for that clinician.
 
 `1` means no two assignments on consecutive days. `2` means at least one full day off between assignments. `0` allows back-to-back.
+
+### `rules.avoid_b2b_weekends`
+
+`true` (the default) turns on the `b2b_weekend` penalty: the solver tries not to give one clinician two weekends in a row. `false` turns it off. This is the PostCallMD practice setting "avoid back-to-back weekends". The export does not carry that setting yet, so set it here.
+
+### `rules.history_balance`
+
+What the `history_balance` weight balances. `"total"` (the default when the key is absent): history plus this month, the same for every clinician. `"target"` (set in `my_rules.template.json`): history plus this month, minus `target_shifts` for each month of the clinician's history and this month. With `"target"`, a half-time clinician with half the target is even at half the calls.
 
 ### `rules.preferred_days_between_assignments`
 
@@ -126,10 +155,11 @@ These are the relative importances of the soft objectives. Higher number = the s
 | Weight | Default | What it controls |
 | --- | --- | --- |
 | `target_deviation` | 100 | Penalty per shift over or under each clinician's `target_shifts`. Highest weight in the sample — the solver tries hardest to hit targets. |
-| `history_balance` | 40 | Penalty when (history + current) totals are imbalanced across clinicians. Pulls down whoever covered the most recent months. |
+| `history_balance` | 40 | Penalty when (history + current) totals are imbalanced across clinicians. Pulls down whoever covered the most recent months. With `rules.history_balance` set to `"target"`, the totals are counted against each clinician's `target_shifts`. |
 | `weekend_deviation` | 35 | Penalty per weekend shift over or under each clinician's `target_weekend_shifts`. Weekend fairness is tracked separately from total fairness. |
 | `soft_request_violation` | 25 | Penalty when a `hard=0` request is violated. Set higher than `target_deviation` if you want soft requests to almost always be honored even at the cost of fairness. |
 | `weekday_repeat` | 20 (0 in sample) | Penalty per historical `(clinician, weekday)` per new assignment on that weekday. Pulls apart stagnation patterns like "Cary always gets Mondays" over time. No-op on a first-month solve (history is empty). `sample_rules.json` sets this to `0` so the article's sample schedule stays stable; `my_rules.template.json` sets `20` so real groups get the term active. |
+| `b2b_weekend` | 40 (0 in sample) | Penalty when one clinician works two weekends in a row. A weekend is Saturday and Sunday. The last weekend before the month, from history, counts. Off when `rules.avoid_b2b_weekends` is `false`. |
 | `rest_spacing` | 5 | Small penalty whenever two assignments fall closer than `preferred_days_between_assignments`. The closer the pair, the higher the penalty. Low weight by design — the hard rest gap is what guarantees rest; this just gently spreads things out beyond the floor. |
 
 ### Tuning the weights

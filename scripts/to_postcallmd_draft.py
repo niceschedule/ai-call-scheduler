@@ -47,9 +47,9 @@ post_call_ok) is cleared when both hold:
 
 * config/my_rules.json lists the token in "enforces", for example
   "enforces": ["weekend_block", "next_day_off"].
-* solver.py has the rule from docs/adaptation-cookbook.md. The script looks
-  for the names the cookbook code uses, so a config entry alone clears
-  nothing.
+* solver.py has the rule. The stock solver.py has all three. The script
+  looks for the names that code uses, so a config entry alone clears
+  nothing, and a solver that lost a rule stays blocked.
 
 A must_on or must_off line is never cleared. The export does not carry the
 request, so no solver can keep it.
@@ -74,9 +74,10 @@ WRAPPER_KEYS = ("structuredContent", "structured_content", "result", "data", "ou
 OUTPUT_COLUMNS = ("date", "shift_type", "clinician_id")
 BLOCKING_PREFIX = "BLOCKING:"
 
-# Shift-type rules a solver can keep, and the names from the cookbook code
-# that must be in solver.py before "enforces" may clear the rule. Entries 6
-# and 7 depend on entry 5, so they need its names too.
+# Shift-type rules a solver can keep, and the names from the stock
+# solver.py code that must be in the solver before "enforces" may clear the
+# rule. next_day_off and post_call_ok make their weekend exception from the
+# weekend_block pairs, so they need its names too.
 SOLVER_RULES = {
     "weekend_block": ("load_shift_flags", "weekend_block_pairs", "block_saturdays"),
     "next_day_off": ("load_shift_flags", 'get("next_day_off")', "block_saturdays"),
@@ -201,7 +202,7 @@ def split_blocking(
 ) -> tuple[list[str], list[str], list[str]]:
     """Split BLOCKING lines into (still blocking, cleared, reasons). A line
     is cleared only when its token is a solver rule, the config lists it in
-    enforces, and solver.py has the cookbook code for it."""
+    enforces, and solver.py has the code for it."""
     kept: list[str] = []
     cleared: list[str] = []
     reasons: list[str] = []
@@ -222,7 +223,7 @@ def split_blocking(
             kept.append(line)
             reasons.append(
                 f"{token} is in enforces, but solver.py lacks {', '.join(missing)}. "
-                "Add the rule from docs/adaptation-cookbook.md first."
+                "The stock solver.py keeps the rule. Start again from it."
             )
             continue
         cleared.append(line)
@@ -353,8 +354,8 @@ def main() -> int:
             print(f"to_postcallmd_draft: {reason}", file=sys.stderr)
         print(
             "to_postcallmd_draft: nothing was written. Tell the admin about each line. "
-            "Fix the rule in the app, or add it to the solver from "
-            "docs/adaptation-cookbook.md and list its token in enforces in the config.",
+            "Fix the rule in the app. For weekend_block, next_day_off or post_call_ok, list "
+            "the token in enforces in the config: the stock solver.py keeps all three.",
             file=sys.stderr,
         )
         return 2

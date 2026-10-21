@@ -1,0 +1,39 @@
+{
+  "sites": [
+    {
+      "id": "4e4cfe64-3708-56a9-bc8c-438835bcc486",
+      "code": "MAIN",
+      "name": "Main Hospital"
+    }
+  ],
+  "shift_types": [
+    {
+      "id": "8c1f1e40-48d2-5073-a888-4998345583ad",
+      "code": "1C",
+      "name": "First Call",
+      "category": "call",
+      "facility_id": null,
+      "active": true,
+      "post_call_ok": false,
+      "next_day_off": true,
+      "weekend_block": true,
+      "color": "#1d4ed8"
+    },
+    {
+      "id": "cb20a93b-ee52-57d4-be00-a6a2da63328f",
+      "code": "2C",
+      "name": "Second Call",
+      "category": "call",
+      "facility_id": null,
+      "active": true,
+      "post_call_ok": false,
+      "next_day_off": false,
+      "weekend_block": false,
+      "color": "#be185d"
+    }
+  ],
+  "periods": [],
+  "request_types": [],
+  "settings": {},
+  "stored_solvers": []
+}

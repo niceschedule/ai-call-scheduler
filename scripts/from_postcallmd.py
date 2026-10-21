@@ -8,7 +8,8 @@ coverage_csv, requests_csv, history_csv, shift_types_csv and notes_txt.
 Output, in the data folder (data/my_data by default):
 
     clinicians.csv  coverage.csv  requests.csv  history.csv
-    shift_types.csv (the solver does not read it; the cookbook rules do)
+    shift_types.csv (solver.py reads its weekend_block, next_day_off and
+                     post_call_ok flags and keeps them as hard rules)
     notes.txt       (the export's notes, unchanged, also printed below)
 
 Also config/my_rules.json, copied from config/my_rules.template.json when it
@@ -32,9 +33,12 @@ them, and keeps the rest in history.csv. The solver does not read the
 moved rows. They cannot change anyone's fairness this month.
 
 Nothing in the export is dropped. notes.txt may have a "blocking" section
-with lines that start with "BLOCKING:". Each one is a rule the solver cannot
-keep. The script prints them, and scripts/to_postcallmd_draft.py refuses to
-write a draft while any is there.
+with lines that start with "BLOCKING:". Each one is a rule the solver may
+not keep. The script prints them, and scripts/to_postcallmd_draft.py refuses
+to write a draft while any is there. A line for weekend_block, next_day_off
+or post_call_ok clears when config/my_rules.json lists the token in
+"enforces" (the template lists all three) and solver.py has the rule (the
+stock solver.py has all three).
 
     python3 scripts/py scripts/from_postcallmd.py export.json     (Windows: py -3 scripts/py ...)
 """
@@ -224,7 +228,7 @@ def blocking_lines(notes_txt: str) -> list[str]:
 
 
 def flag_lines(shift_types_csv: str) -> list[str]:
-    """One line per shift type whose rules the solver does not enforce."""
+    """One line per shift type that carries a rule flag."""
     lines = []
     for row in csv_rows(shift_types_csv):
         flags = []
@@ -409,10 +413,10 @@ def main() -> int:
     flags = flag_lines(export["shift_types_csv"])
     if flags:
         print()
-        print("Shift-type rules in shift_types.csv that the solver does not enforce by default:")
+        print("Shift-type rules in shift_types.csv. solver.py keeps them as hard rules, with no code change:")
         for line in flags:
             print(line)
-        print("See docs/adaptation-cookbook.md, section 'App rules from shift_types.csv'.")
+        print("scripts/check_schedule.py checks them on the output. See docs/csv-schema.md, shift_types.csv.")
 
     print()
     print("Notes from the export (read every line):")
@@ -442,8 +446,8 @@ def main() -> int:
             print(f"  {line}")
         print(
             "Tell the admin about each line. A must_on or must_off line needs a change in the app. "
-            "A shift-type line clears when solver.py has the rule from docs/adaptation-cookbook.md "
-            'and config/my_rules.json lists its token in "enforces".'
+            "A weekend_block, next_day_off or post_call_ok line clears when config/my_rules.json lists "
+            'its token in "enforces". The stock solver.py keeps all three. Do not write code for them.'
         )
     print()
     print("Next:")
