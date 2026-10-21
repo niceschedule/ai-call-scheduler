@@ -17,6 +17,7 @@ The sample solver reads four CSV files from the configured input directory.
 | `target_weekend_shifts` | Yes | Preferred number of Saturday/Sunday assignments. |
 | `max_weekend_shifts` | Yes | Hard maximum Saturday/Sunday assignments. |
 | `min_days_between_assignments` | No | Hard rest spacing. If blank, the config default is used. |
+| `allow_b2b_weekends` | No | `1` if the clinician agreed to work two weekends in a row. The solver gives that clinician no `b2b_weekend` penalty. Blank, `0` or a missing column keeps the penalty. The PostCallMD export fills it from the clinician setting "allow back-to-back weekends". |
 
 For new shift types, add a column named `can_<shift_type_lowercase>`.
 For example, `CARDIAC` uses `can_cardiac`.
@@ -138,7 +139,9 @@ Hard floor on the rest gap between any clinician's two assignments. Used when `m
 
 ### `rules.avoid_b2b_weekends`
 
-`true` (the default) turns on the `b2b_weekend` penalty: the solver tries not to give one clinician two weekends in a row. `false` turns it off. This is the PostCallMD practice setting "avoid back-to-back weekends". The export does not carry that setting yet, so set it here.
+`true` (the default) turns on the `b2b_weekend` penalty: the solver tries not to give one clinician two weekends in a row. `false` turns it off. A clinician with `allow_b2b_weekends` = `1` in `clinicians.csv` gets no penalty either way.
+
+This is the PostCallMD practice setting "avoid back-to-back weekends". The export carries it in the `settings_json` key, a JSON object such as `{"avoid_b2b_weekends": false}`. `scripts/from_postcallmd.py` writes it to `settings.json` in the data folder and sets this key from it on every run, so the app setting wins over a value typed here. An export without `settings_json` leaves this key as it is. The solver does not read `settings.json`.
 
 ### `rules.history_balance`
 
@@ -159,7 +162,7 @@ These are the relative importances of the soft objectives. Higher number = the s
 | `weekend_deviation` | 35 | Penalty per weekend shift over or under each clinician's `target_weekend_shifts`. Weekend fairness is tracked separately from total fairness. |
 | `soft_request_violation` | 25 | Penalty when a `hard=0` request is violated. Set higher than `target_deviation` if you want soft requests to almost always be honored even at the cost of fairness. |
 | `weekday_repeat` | 20 (0 in sample) | Penalty per historical `(clinician, weekday)` per new assignment on that weekday. Pulls apart stagnation patterns like "Cary always gets Mondays" over time. No-op on a first-month solve (history is empty). `sample_rules.json` sets this to `0` so the article's sample schedule stays stable; `my_rules.template.json` sets `20` so real groups get the term active. |
-| `b2b_weekend` | 40 (0 in sample) | Penalty when one clinician works two weekends in a row. A weekend is Saturday and Sunday. The last weekend before the month, from history, counts. Off when `rules.avoid_b2b_weekends` is `false`. |
+| `b2b_weekend` | 40 (0 in sample) | Penalty when one clinician works two weekends in a row. A weekend is Saturday and Sunday. The last weekend before the month, from history, counts. Off when `rules.avoid_b2b_weekends` is `false`, and for a clinician with `allow_b2b_weekends` = `1`. |
 | `rest_spacing` | 5 | Small penalty whenever two assignments fall closer than `preferred_days_between_assignments`. The closer the pair, the higher the penalty. Low weight by design — the hard rest gap is what guarantees rest; this just gently spreads things out beyond the floor. |
 
 ### Tuning the weights

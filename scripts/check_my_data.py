@@ -165,6 +165,11 @@ def main() -> int:
         if clinician_id in seen_ids:
             errors.append(f"clinicians.csv has duplicate clinician_id {clinician_id!r}")
         seen_ids.add(clinician_id)
+        b2b = (row.get("allow_b2b_weekends") or "").strip().lower()
+        if b2b not in {"", "0", "1", "true", "false", "yes", "no", "y", "n"}:
+            errors.append(
+                f"clinicians.csv row {index} allow_b2b_weekends is {b2b!r}; use 1, 0 or blank"
+            )
         if parse_bool(row.get("active", "1")):
             active_ids.add(clinician_id)
             m = parse_nonnegative_int(

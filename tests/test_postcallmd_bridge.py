@@ -191,6 +191,70 @@ def test_from_postcallmd_writes_blocking_notes_through_and_flags_them():
         assert "  BLOCKING: OB Call has weekend_block" in result.stdout
 
 
+def test_an_export_without_settings_json_keeps_the_config_default():
+    with tempfile.TemporaryDirectory() as tmp:
+        data_dir, config, result = import_export(Path(tmp))
+        check(result)
+        assert not (data_dir / "settings.json").exists()
+        assert "Practice settings" not in result.stdout
+        assert json.loads(config.read_text())["rules"]["avoid_b2b_weekends"] is True
+
+
+def test_settings_json_sets_avoid_b2b_weekends_in_the_config():
+    export = json.loads(EXPORT.read_text())
+    export["settings_json"] = json.dumps({"avoid_b2b_weekends": False, "later_key": 1})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir = root / "data" / "my_data"
+        config = root / "config" / "my_rules.json"
+        config.parent.mkdir()
+        # An existing config that says true: the practice setting wins.
+        config.write_text(json.dumps({
+            "input_dir": "data/my_data", "rules": {"avoid_b2b_weekends": True, "weights": {"b2b_weekend": 40}},
+        }))
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", config)
+        check(result)
+        cfg = json.loads(config.read_text())
+        assert cfg["rules"]["avoid_b2b_weekends"] is False
+        assert cfg["rules"]["weights"] == {"b2b_weekend": 40}, "other rules are kept"
+        assert json.loads((data_dir / "settings.json").read_text())["avoid_b2b_weekends"] is False
+        assert "avoid_b2b_weekends = false" in result.stdout
+        assert "changed avoid_b2b_weekends: true -> false" in result.stdout
+        assert "Settings in settings_json that this script does not use: later_key" in result.stdout
+        assert "Keys in the export that this script does not use" not in result.stdout
+
+
+def test_a_bad_settings_json_writes_nothing():
+    export = json.loads(EXPORT.read_text())
+    for bad in ('{"avoid_b2b_weekends": "no"}', "[1]", "{not json"):
+        export["settings_json"] = bad
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", root / "d", "--config", root / "c" / "r.json")
+            check(result, 2)
+            assert "could not read settings_json" in result.stderr
+            assert not (root / "d").exists()
+
+
+def test_allow_b2b_weekends_column_passes_through_and_is_named():
+    export = json.loads(EXPORT.read_text())
+    lines = export["clinicians_csv"].splitlines()
+    lines[0] += ",allow_b2b_weekends"
+    lines[1:] = [line + ("," + ("1" if i == 0 else "0")) for i, line in enumerate(lines[1:])]
+    export["clinicians_csv"] = "\n".join(lines) + "\n"
+    first = lines[1].split(",")[1]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir = root / "data" / "my_data"
+        config = root / "config" / "my_rules.json"
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", config)
+        check(result)
+        people = rows(data_dir / "clinicians.csv")
+        assert [r["allow_b2b_weekends"] for r in people][:2] == ["1", "0"]
+        assert f"b2b_weekend penalty: {first}" in result.stdout
+        check(run(REPO / "scripts" / "check_my_data.py", "--config", config))
+
+
 def test_from_postcallmd_fails_on_a_missing_key():
     export = json.loads(EXPORT.read_text())
     del export["shift_types_csv"]

@@ -713,7 +713,9 @@ def solve(config_path: Path, verbose: bool = False) -> int:
     # Avoid the same clinician on two weekends in a row. A weekend is keyed
     # by its Saturday. A weekend in history just before the month counts, so
     # the first weekend of the month is checked against the last one before
-    # it. Turn it off with rules.avoid_b2b_weekends = false.
+    # it. Turn it off with rules.avoid_b2b_weekends = false. A clinician with
+    # allow_b2b_weekends = 1 in clinicians.csv (a consented exemption) gets
+    # no penalty. The column is optional: blank or missing means 0.
     avoid_b2b = rules.get("avoid_b2b_weekends", True) is not False
     b2b_weight = parse_int(str(weights.get("b2b_weekend", 40)))
     if avoid_b2b and b2b_weight > 0:
@@ -726,6 +728,8 @@ def solve(config_path: Path, verbose: bool = False) -> int:
                 weekend_days[weekend_key(day)].append(day)
         keys = sorted(weekend_days)
         for clinician_id in clinician_ids:
+            if parse_bool(clinicians[clinician_id].get("allow_b2b_weekends") or "0"):
+                continue
             history_weekends = {
                 weekend_key(day)
                 for (day, cid) in history_before
