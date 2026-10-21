@@ -27,7 +27,13 @@ The Saturday and Sunday of a weekend block are one assignment, so rules 6,
 8 and 9 allow that one pair. Rules 6, 8 and 9 also read history.csv for the
 day before the month, and rule 7 for a Sunday on the first day.
 
+It also lists the breaks of the two strong soft rules, as warnings:
+avoid_call_after_vacation (call on the day after a vacation) and
+avoid_call_before_vacation (call on the day before a vacation). A warning
+does not fail the check. The admin should see each one.
+
 Exit 0 when every rule holds, 1 when one or more fail, 2 for a bad input.
+Warnings do not change the exit code.
 
     python3 scripts/py scripts/check_schedule.py --config config/my_rules.json
 """
@@ -57,6 +63,8 @@ from solver import (  # noqa: E402  (the solver's own readers, so both read the 
     parse_date,
     parse_int,
     request_matches,
+    vacation_break_line,
+    vacation_breaks,
 )
 
 
@@ -67,6 +75,13 @@ def resolve_path(base: Path, value: str | Path) -> Path:
 
 def check(config_path: Path, schedule_path: Path | None = None) -> list[str]:
     """Every broken rule, one line each. Empty when the schedule is valid."""
+    return check_with_warnings(config_path, schedule_path)[0]
+
+
+def check_with_warnings(
+    config_path: Path, schedule_path: Path | None = None
+) -> tuple[list[str], list[str]]:
+    """The broken hard rules and the broken soft vacation rules, one line each."""
     config = json.loads(config_path.read_text())
     base = config_path.parent.parent
     input_dir = resolve_path(base, config["input_dir"])
@@ -235,7 +250,11 @@ def check(config_path: Path, schedule_path: Path | None = None) -> list[str]:
                         problems.append(
                             f"post_call_ok: {cid} works {code_b} on {day_b} after call ({code_a}) on {day_a}"
                         )
-    return problems
+    warnings = [
+        vacation_break_line(rule, clinicians[cid]["name"] if cid in clinicians else cid, day, code, locked)
+        for rule, cid, day, code, locked in vacation_breaks(rows, requests, flags, rules)
+    ]
+    return problems, warnings
 
 
 def main() -> int:
@@ -246,10 +265,14 @@ def main() -> int:
     config_path = resolve_path(ROOT, args.config)
     schedule = resolve_path(ROOT, args.schedule) if args.schedule else None
     try:
-        problems = check(config_path, schedule)
+        problems, warnings = check_with_warnings(config_path, schedule)
     except (OSError, ValueError, KeyError) as exc:
         print(f"check_schedule: {exc}", file=sys.stderr)
         return 2
+    if warnings:
+        print(f"Warnings: {len(warnings)} soft vacation rule(s) broken. Tell the admin about each one:")
+        for line in warnings:
+            print(f"  - WARNING {line}")
     if problems:
         print(f"Schedule check FAILED: {len(problems)} broken rule(s):")
         for line in problems:

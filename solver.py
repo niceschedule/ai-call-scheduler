@@ -243,6 +243,79 @@ def request_matches(request: RequestRow, day: date, shift_type: str) -> bool:
     return request.shift_type is None or request.shift_type == shift_type
 
 
+# The two vacation rules: rule name -> (weight key, default weight, the words
+# of the report line). Both are soft and strong. See SOFT PREFERENCE 8.
+VACATION_RULES = {
+    "avoid_call_after_vacation": ("call_after_vacation", 500, "the day after a vacation"),
+    "avoid_call_before_vacation": ("call_before_vacation", 500, "the day before a vacation"),
+}
+
+
+def is_call_shift(code: str, shift_flags: dict[str, dict]) -> bool:
+    """A coverage shift type is call unless shift_types.csv says daily.
+    Without shift_types.csv every shift type is call."""
+    return shift_flags.get(code, {}).get("category") != "daily"
+
+
+def vacation_edges(
+    requests: list[RequestRow], rules: dict
+) -> dict[str, set[tuple[str, date]]]:
+    """The (clinician, day) pairs each vacation rule protects. A vacation is
+    a whole-day request with request_type vacation and hard = 1. Rows that
+    touch end to end are one block. The day after the last day and the day
+    before the first day are protected, also when the vacation days are
+    outside the month (the PostCallMD export carries the day before and the
+    day after the month for this). A rule turned off in the config has no
+    days."""
+    days: dict[str, set[date]] = defaultdict(set)
+    for r in requests:
+        if r.request_type == "vacation" and r.hard and r.shift_type is None:
+            day = r.start_date
+            while day <= r.end_date:
+                days[r.clinician_id].add(day)
+                day += timedelta(days=1)
+    one = timedelta(days=1)
+    edges: dict[str, set[tuple[str, date]]] = {}
+    for rule in VACATION_RULES:
+        edges[rule] = set()
+        if rules.get(rule, True) is False:
+            continue
+        step = one if rule == "avoid_call_after_vacation" else -one
+        for cid, off in days.items():
+            edges[rule] |= {(cid, d + step) for d in off if d + step not in off}
+    return edges
+
+
+def vacation_breaks(
+    rows: list[tuple[str, date, str]],
+    requests: list[RequestRow],
+    shift_flags: dict[str, dict],
+    rules: dict,
+) -> list[tuple[str, str, date, str, bool]]:
+    """Each call assignment on a protected day: (rule, clinician, day, shift,
+    locked). rows are (clinician, day, shift) of a schedule."""
+    edges = vacation_edges(requests, rules)
+    out = []
+    for cid, day, code in sorted(rows, key=lambda r: (r[1], r[0], r[2])):
+        if not is_call_shift(code, shift_flags):
+            continue
+        for rule, protected in edges.items():
+            if (cid, day) in protected:
+                locked = any(
+                    r.request_type == "lock" and r.clinician_id == cid
+                    and request_matches(r, day, code)
+                    for r in requests
+                )
+                out.append((rule, cid, day, code, locked))
+    return out
+
+
+def vacation_break_line(rule: str, name: str, day: date, code: str, locked: bool) -> str:
+    """The plain report line of one broken vacation rule."""
+    line = f"{rule}: {name} works {code} on {day.isoformat()}, {VACATION_RULES[rule][2]}."
+    return line + " The day is locked." if locked else line
+
+
 def solve(config_path: Path, verbose: bool = False) -> int:
     # The config file tells the solver where to find input CSVs, where to write
     # output, and how strongly to weight soft preferences.
@@ -750,6 +823,39 @@ def solve(config_path: Path, verbose: bool = False) -> int:
                 elif prev in history_weekends:
                     objective_terms.append(b2b_weight * worked[key])
 
+    # SOFT PREFERENCE 8 (strong):
+    # No call on the day after a vacation ends (avoid_call_after_vacation),
+    # and no call on the day before a vacation starts
+    # (avoid_call_before_vacation). Each is on unless rules sets it to false.
+    # The default weight, 500 for each, is more than the fairness terms
+    # charge to move one call to another clinician: at most 2 x 100
+    # target_deviation + 2 x 35 weekend_deviation + 2 x 40 history_balance +
+    # 40 b2b_weekend + 25 soft_request_violation = 415, with about 85 left
+    # for weekday_repeat and rest_spacing. So in practice the rule gives way
+    # only to coverage and the hard rules. A lock on a
+    # protected day is hard, so it adds no penalty. The solver prints each
+    # break after the solve, and scripts/check_schedule.py lists it as a
+    # warning.
+    vacation_edge_days = vacation_edges(requests, rules)
+    for rule, protected in vacation_edge_days.items():
+        weight_key, default_weight, _ = VACATION_RULES[rule]
+        weight = parse_int(str(weights.get(weight_key, default_weight)))
+        if weight <= 0 or not protected:
+            continue
+        for cov_id, cov in enumerate(coverage):
+            if not is_call_shift(cov.shift_type, shift_flags):
+                continue
+            for clinician_id in clinician_ids:
+                if (clinician_id, cov.date) not in protected:
+                    continue
+                if any(
+                    r.request_type == "lock" and r.clinician_id == clinician_id
+                    and request_matches(r, cov.date, cov.shift_type)
+                    for r in requests
+                ):
+                    continue
+                objective_terms.append(weight * x[(cov_id, clinician_id)])
+
     # The objective is the total penalty across all soft preferences. Hard rules
     # are not in the objective because they are mandatory.
     model.Minimize(sum(objective_terms))
@@ -809,6 +915,15 @@ def solve(config_path: Path, verbose: bool = False) -> int:
     if verbose:
         print(f"Objective: {solver.ObjectiveValue():.0f}")
     print(f"Wrote {len(rows)} assignments to {output_path}")
+    breaks = vacation_breaks(
+        [(r["clinician_id"], date.fromisoformat(r["date"]), r["shift_type"]) for r in rows],
+        requests, shift_flags, rules,
+    )
+    if breaks:
+        print()
+        print(f"Vacation rules broken ({len(breaks)}). Tell the admin about each one:")
+        for rule, cid, day, code, locked in breaks:
+            print("  " + vacation_break_line(rule, clinicians[cid]["name"], day, code, locked))
     print()
     print("Assignment summary:")
     for clinician_id in clinician_ids:

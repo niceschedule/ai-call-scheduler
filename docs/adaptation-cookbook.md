@@ -174,6 +174,12 @@ To turn a rule off for one shift type, change the flag in the app and export aga
 
 `tests/test_shift_rules.py` solves the sample with each flag, and a 1C/2C fixture practice with all of them, and checks the output with `scripts/check_schedule.py`.
 
+## No call next to a vacation (built in)
+
+The stock `solver.py` has two strong soft rules: no call on the day after a hard vacation (`avoid_call_after_vacation`) and no call on the day before one (`avoid_call_before_vacation`). Both are on by default. **You do not write code for them.** Turn one off with `false` under `rules` in the config. Change its weight (`call_after_vacation`, `call_before_vacation`, 500 each) to make it weaker or stronger. `docs/csv-schema.md` gives the exact behavior.
+
+The rules are soft, so a month without enough people still solves. Each break is a line in the solver output and a `WARNING` line in `scripts/check_schedule.py`. Tell the admin about each one. `tests/test_vacation_rules.py` covers both rules, the switches, a forced break, a lock and the days outside the month.
+
 ---
 
 ## What to add next

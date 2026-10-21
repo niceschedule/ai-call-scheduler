@@ -11,6 +11,8 @@
     "preferred_days_between_assignments": 3,
     "history_balance": "target",
     "avoid_b2b_weekends": true,
+    "avoid_call_after_vacation": true,
+    "avoid_call_before_vacation": true,
     "weights": {
       "target_deviation": 100,
       "history_balance": 40,
@@ -18,7 +20,9 @@
       "soft_request_violation": 25,
       "weekday_repeat": 20,
       "rest_spacing": 5,
-      "b2b_weekend": 40
+      "b2b_weekend": 40,
+      "call_after_vacation": 500,
+      "call_before_vacation": 500
     }
   }
 }
