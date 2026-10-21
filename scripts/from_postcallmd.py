@@ -4,18 +4,24 @@
 Input: the JSON object that the PostCallMD MCP tool export_solver_inputs
 returns, saved to a file. It has six string keys: clinicians_csv,
 coverage_csv, requests_csv, history_csv, shift_types_csv and notes_txt.
+A newer export also has settings_json, a JSON object of practice settings.
+An export without it still loads.
 
 Output, in the data folder (data/my_data by default):
 
     clinicians.csv  coverage.csv  requests.csv  history.csv
-    shift_types.csv (the solver does not read it; the cookbook rules do)
+    shift_types.csv (solver.py reads its weekend_block, next_day_off and
+                     post_call_ok flags and keeps them as hard rules)
     notes.txt       (the export's notes, unchanged, also printed below)
+    settings.json   (settings_json, unchanged, when the export has it)
 
 Also config/my_rules.json, copied from config/my_rules.template.json when it
 does not exist yet. On every run, output_csv in the config is set to
 output/schedule_YYYY-MM.csv for the month of coverage.csv, so a rerun for a
-new month never writes over the last month's schedule. The other keys of an
-existing config are kept.
+new month never writes over the last month's schedule. Each practice
+setting in settings_json that the solver reads (avoid_b2b_weekends) is set
+under "rules", so the app setting wins. The other keys of an existing
+config are kept.
 
 The script stops before it writes anything when:
 
@@ -32,9 +38,12 @@ them, and keeps the rest in history.csv. The solver does not read the
 moved rows. They cannot change anyone's fairness this month.
 
 Nothing in the export is dropped. notes.txt may have a "blocking" section
-with lines that start with "BLOCKING:". Each one is a rule the solver cannot
-keep. The script prints them, and scripts/to_postcallmd_draft.py refuses to
-write a draft while any is there.
+with lines that start with "BLOCKING:". Each one is a rule the solver may
+not keep. The script prints them, and scripts/to_postcallmd_draft.py refuses
+to write a draft while any is there. A line for weekend_block, next_day_off
+or post_call_ok clears when config/my_rules.json lists the token in
+"enforces" (the template lists all three) and solver.py has the rule (the
+stock solver.py has all three).
 
     python3 scripts/py scripts/from_postcallmd.py export.json     (Windows: py -3 scripts/py ...)
 """
@@ -58,6 +67,13 @@ EXPORT_KEYS = (
     "shift_types_csv",
     "notes_txt",
 )
+
+# Keys a newer export adds. An export without them still loads.
+OPTIONAL_KEYS = ("settings_json",)
+
+# Practice settings in settings_json that the script copies into the config,
+# under "rules". The value is the type each must have.
+SETTINGS_RULES = {"avoid_b2b_weekends": bool}
 
 # The columns each file must have for solver.py and scripts/check_my_data.py.
 REQUIRED_COLUMNS = {
@@ -218,13 +234,40 @@ def split_history(history_csv: str, clinicians_csv: str) -> tuple[str, str | Non
     return render(matched), render(unmatched), lines
 
 
+def parse_settings(text: str) -> tuple[dict, list[str]]:
+    """Read settings_json. Returns the rules to set and the unknown keys.
+    Raises ValueError when the text is not a JSON object or a value has the
+    wrong type."""
+    data = json.loads(text) if text.strip() else {}
+    if not isinstance(data, dict):
+        raise ValueError("settings_json must hold a JSON object")
+    rules = {}
+    for key, kind in SETTINGS_RULES.items():
+        if key in data:
+            if not isinstance(data[key], kind):
+                raise ValueError(f"settings_json {key} must be {kind.__name__}, not {data[key]!r}")
+            rules[key] = data[key]
+    return rules, sorted(k for k in data if k not in SETTINGS_RULES)
+
+
+def b2b_exempt_names(clinicians_csv: str) -> list[str]:
+    """Names of active clinicians with allow_b2b_weekends = 1."""
+    yes = {"1", "true", "yes", "y"}
+    return [
+        (row.get("name") or row.get("clinician_id") or "").strip()
+        for row in csv_rows(clinicians_csv)
+        if (row.get("allow_b2b_weekends") or "").strip().lower() in yes
+        and (row.get("active") or "1").strip().lower() in yes
+    ]
+
+
 def blocking_lines(notes_txt: str) -> list[str]:
     """Lines of the export's notes that start with BLOCKING:."""
     return [line.strip() for line in notes_txt.splitlines() if line.lstrip().startswith("BLOCKING:")]
 
 
 def flag_lines(shift_types_csv: str) -> list[str]:
-    """One line per shift type whose rules the solver does not enforce."""
+    """One line per shift type that carries a rule flag."""
     lines = []
     for row in csv_rows(shift_types_csv):
         flags = []
@@ -287,10 +330,19 @@ def main() -> int:
             "Save the full result of export_solver_inputs, which has six keys: "
             + ", ".join(EXPORT_KEYS) + "."
         )
-    not_text = [k for k in EXPORT_KEYS if not isinstance(export[k], str)]
+    not_text = [
+        k for k in EXPORT_KEYS + OPTIONAL_KEYS if k in export and not isinstance(export[k], str)
+    ]
     if not_text:
         return fail("these keys must hold text: " + ", ".join(not_text))
-    extra = sorted(k for k in export if k not in EXPORT_KEYS)
+    extra = sorted(k for k in export if k not in EXPORT_KEYS + OPTIONAL_KEYS)
+    settings_rules: dict = {}
+    unknown_settings: list[str] = []
+    if "settings_json" in export:
+        try:
+            settings_rules, unknown_settings = parse_settings(export["settings_json"])
+        except (ValueError, json.JSONDecodeError) as exc:
+            return fail(f"could not read settings_json: {exc}")
 
     problems: list[str] = []
     for key in EXPORT_KEYS[:-1]:
@@ -352,14 +404,23 @@ def main() -> int:
         config_created = True
     previous_output = config.get("output_csv")
     config["output_csv"] = output_csv
+    # The practice settings win over the config: the app is the record.
+    settings_changed: list[str] = []
+    if settings_rules:
+        rules = config.setdefault("rules", {})
+        for key, value in settings_rules.items():
+            if rules.get(key) != value:
+                settings_changed.append(f"{key}: {json.dumps(rules.get(key))} -> {json.dumps(value)}")
+            rules[key] = value
     data_dir.mkdir(parents=True, exist_ok=True)
     history_text, unmatched_text, unmatched_lines = split_history(
         export["history_csv"], export["clinicians_csv"]
     )
     unmatched_path = data_dir / "history_unmatched.csv"
     written: list[tuple[str, int]] = []
-    for key in EXPORT_KEYS:
-        filename = key[: -len("_csv")] + ".csv" if key.endswith("_csv") else "notes.txt"
+    file_names = {"notes_txt": "notes.txt", "settings_json": "settings.json"}
+    for key in EXPORT_KEYS + tuple(k for k in OPTIONAL_KEYS if k in export):
+        filename = file_names.get(key) or key[: -len("_csv")] + ".csv"
         text = history_text if key == "history_csv" else export[key]
         if not text.endswith("\n"):
             text += "\n"
@@ -384,6 +445,8 @@ def main() -> int:
         print(f"  {filename:<16} {count:>4} {unit}")
     if extra:
         print("Keys in the export that this script does not use: " + ", ".join(extra))
+    if unknown_settings:
+        print("Settings in settings_json that this script does not use: " + ", ".join(unknown_settings))
     if unmatched_lines:
         print(
             "History rows for clinicians who are not active in clinicians.csv were moved "
@@ -406,13 +469,28 @@ def main() -> int:
         if input_dir_moved:
             print(f"  input_dir now points at {config['input_dir']} (--force).")
 
+    if settings_rules:
+        print()
+        print(f"Practice settings from settings_json, set under rules in {display_path(root, config_path)}:")
+        for key, value in settings_rules.items():
+            print(f"  {key} = {json.dumps(value)}")
+        for line in settings_changed:
+            print(f"  changed {line}")
+    exempt = b2b_exempt_names(export["clinicians_csv"])
+    if exempt:
+        print()
+        print(
+            "allow_b2b_weekends = 1 in clinicians.csv (consented). solver.py gives them no "
+            "b2b_weekend penalty: " + ", ".join(exempt)
+        )
+
     flags = flag_lines(export["shift_types_csv"])
     if flags:
         print()
-        print("Shift-type rules in shift_types.csv that the solver does not enforce by default:")
+        print("Shift-type rules in shift_types.csv. solver.py keeps them as hard rules, with no code change:")
         for line in flags:
             print(line)
-        print("See docs/adaptation-cookbook.md, section 'App rules from shift_types.csv'.")
+        print("scripts/check_schedule.py checks them on the output. See docs/csv-schema.md, shift_types.csv.")
 
     print()
     print("Notes from the export (read every line):")
@@ -442,8 +520,8 @@ def main() -> int:
             print(f"  {line}")
         print(
             "Tell the admin about each line. A must_on or must_off line needs a change in the app. "
-            "A shift-type line clears when solver.py has the rule from docs/adaptation-cookbook.md "
-            'and config/my_rules.json lists its token in "enforces".'
+            "A weekend_block, next_day_off or post_call_ok line clears when config/my_rules.json lists "
+            'its token in "enforces". The stock solver.py keeps all three. Do not write code for them.'
         )
     print()
     print("Next:")

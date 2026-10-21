@@ -65,14 +65,11 @@ def unblock(data_dir: Path) -> None:
     notes.write_text("\n".join("blocking: none" if line == "blocking:" else line for line in kept) + "\n")
 
 
-def cookbook_solver(root: Path) -> Path:
-    """solver.py with the three cookbook rules, written into root."""
-    sys.path.insert(0, str(REPO / "tests"))
-    from test_cookbook import patched_solver
-
-    path = root / "solver.py"
-    path.write_text(patched_solver(["weekend-block", "next-day-off", "post-call-ok"]), encoding="utf-8")
-    shutil.copy(REPO / "schedule_html.py", root / "schedule_html.py")
+def ruleless_solver(root: Path) -> Path:
+    """A solver file without the shift-type rules, as an old or edited
+    solver.py would be. The draft gate reads only its text."""
+    path = root / "old_solver.py"
+    path.write_text("# a solver.py without weekend_block, next_day_off or post_call_ok\n", encoding="utf-8")
     return path
 
 
@@ -98,7 +95,9 @@ def test_from_postcallmd_writes_every_file_and_the_config():
         assert "Notes from the export" in result.stdout
         assert "prefer_on" in result.stdout
         assert "OB Call: next_day_off, weekend_block, post_call_ok=0" in result.stdout
-        assert "STOP: the export has 5 BLOCKING line(s)" in result.stdout
+        # The template lists the three rules in enforces, and solver.py keeps them.
+        assert "STOP" not in result.stdout
+        assert "BLOCKING lines that solver.py keeps" in result.stdout
         # Config from the template, pointed at the data and a dated output.
         assert config.exists()
         cfg = json.loads(config.read_text())
@@ -187,8 +186,73 @@ def test_from_postcallmd_writes_blocking_notes_through_and_flags_them():
         result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", root / "config" / "r.json")
         check(result)
         assert (data_dir / "notes.txt").read_text() == export["notes_txt"]
-        assert "STOP: the export has 6 BLOCKING line(s)" in result.stdout
+        # The five shift-type lines clear. This line names no rule token, so it stays.
+        assert "STOP: the export has 1 BLOCKING line(s)" in result.stdout
         assert "  BLOCKING: OB Call has weekend_block" in result.stdout
+
+
+def test_an_export_without_settings_json_keeps_the_config_default():
+    with tempfile.TemporaryDirectory() as tmp:
+        data_dir, config, result = import_export(Path(tmp))
+        check(result)
+        assert not (data_dir / "settings.json").exists()
+        assert "Practice settings" not in result.stdout
+        assert json.loads(config.read_text())["rules"]["avoid_b2b_weekends"] is True
+
+
+def test_settings_json_sets_avoid_b2b_weekends_in_the_config():
+    export = json.loads(EXPORT.read_text())
+    export["settings_json"] = json.dumps({"avoid_b2b_weekends": False, "later_key": 1})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir = root / "data" / "my_data"
+        config = root / "config" / "my_rules.json"
+        config.parent.mkdir()
+        # An existing config that says true: the practice setting wins.
+        config.write_text(json.dumps({
+            "input_dir": "data/my_data", "rules": {"avoid_b2b_weekends": True, "weights": {"b2b_weekend": 40}},
+        }))
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", config)
+        check(result)
+        cfg = json.loads(config.read_text())
+        assert cfg["rules"]["avoid_b2b_weekends"] is False
+        assert cfg["rules"]["weights"] == {"b2b_weekend": 40}, "other rules are kept"
+        assert json.loads((data_dir / "settings.json").read_text())["avoid_b2b_weekends"] is False
+        assert "avoid_b2b_weekends = false" in result.stdout
+        assert "changed avoid_b2b_weekends: true -> false" in result.stdout
+        assert "Settings in settings_json that this script does not use: later_key" in result.stdout
+        assert "Keys in the export that this script does not use" not in result.stdout
+
+
+def test_a_bad_settings_json_writes_nothing():
+    export = json.loads(EXPORT.read_text())
+    for bad in ('{"avoid_b2b_weekends": "no"}', "[1]", "{not json"):
+        export["settings_json"] = bad
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", root / "d", "--config", root / "c" / "r.json")
+            check(result, 2)
+            assert "could not read settings_json" in result.stderr
+            assert not (root / "d").exists()
+
+
+def test_allow_b2b_weekends_column_passes_through_and_is_named():
+    export = json.loads(EXPORT.read_text())
+    lines = export["clinicians_csv"].splitlines()
+    lines[0] += ",allow_b2b_weekends"
+    lines[1:] = [line + ("," + ("1" if i == 0 else "0")) for i, line in enumerate(lines[1:])]
+    export["clinicians_csv"] = "\n".join(lines) + "\n"
+    first = lines[1].split(",")[1]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        data_dir = root / "data" / "my_data"
+        config = root / "config" / "my_rules.json"
+        result = run(FROM_SCRIPT, write_export(root, export), "--data-dir", data_dir, "--config", config)
+        check(result)
+        people = rows(data_dir / "clinicians.csv")
+        assert [r["allow_b2b_weekends"] for r in people][:2] == ["1", "0"]
+        assert f"b2b_weekend penalty: {first}" in result.stdout
+        check(run(REPO / "scripts" / "check_my_data.py", "--config", config))
 
 
 def test_from_postcallmd_fails_on_a_missing_key():
@@ -229,8 +293,9 @@ def test_from_postcallmd_unwraps_a_client_wrapper():
 
 def test_export_solves_optimal_and_round_trips_to_a_draft():
     """The whole app route: import, data check, solve, draft. The fixture's
-    shift types carry all three flags, so the stock solver is blocked, and
-    the cookbook solver with enforces gets through."""
+    shift types carry all three flags. The stock solver keeps them, and the
+    template lists them in enforces, so the draft gets through with no code
+    change. Without enforces, or with a solver that lacks a rule, it stops."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         data_dir, config, result = import_export(root)
@@ -244,24 +309,26 @@ def test_export_solves_optimal_and_round_trips_to_a_draft():
         schedule = root / "output" / "schedule_2026-06.csv"
         assert schedule.exists()
 
-        # The stock solver keeps none of the flags, so the gate holds.
+        check(run(REPO / "scripts" / "check_schedule.py", "--config", config))
+
+        # Without the tokens in enforces, the gate holds.
         draft_path = root / "output" / "draft.json"
+        set_enforces(config, [])
         blocked = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path)
         check(blocked, 2)
         assert "5 BLOCKING line(s)" in blocked.stderr
         assert not draft_path.exists()
 
-        # enforces alone clears nothing: solver.py lacks the rules.
+        # enforces alone clears nothing: a solver that lacks the rules stays blocked.
         set_enforces(config, ["weekend_block", "next_day_off", "post_call_ok"])
-        claimed = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config, "--out", draft_path)
+        claimed = run(DRAFT_SCRIPT, "--overview", OVERVIEW, "--config", config,
+                      "--solver", ruleless_solver(root), "--out", draft_path)
         check(claimed, 2)
         assert "weekend_block is in enforces, but solver.py lacks" in claimed.stderr
         assert not draft_path.exists()
 
-        # The cookbook solver keeps all three, so the lines clear.
-        solver = cookbook_solver(root)
-        solve = run(solver, "--config", config)
-        check(solve)
+        # The stock solver keeps all three, so the lines clear.
+        solver = REPO / "solver.py"
         schedule_rows = rows(schedule)
         assert len(schedule_rows) == len(rows(data_dir / "coverage.csv"))
         assert {r["shift_type"] for r in schedule_rows} == {"OR CALL", "OB CALL"}
@@ -308,7 +375,7 @@ def test_enforces_clears_only_the_listed_rules_and_never_a_request():
         root = Path(tmp)
         data_dir, config, result = import_export(root)
         check(result)
-        solver = cookbook_solver(root)
+        solver = REPO / "solver.py"
         check(run(solver, "--config", config))
         notes = data_dir / "notes.txt"
         notes.write_text(

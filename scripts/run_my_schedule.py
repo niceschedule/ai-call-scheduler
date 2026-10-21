@@ -57,7 +57,7 @@ def main() -> int:
     parser.add_argument(
         "--skip-check",
         action="store_true",
-        help="Skip the data preflight check before solving.",
+        help="Skip the data check before the solve and the schedule check after it.",
     )
     args = parser.parse_args()
 
@@ -92,6 +92,20 @@ def main() -> int:
     result = subprocess.run(solve_cmd, check=False)
     if result.returncode != 0:
         return result.returncode
+
+    if not args.skip_check:
+        # Check every hard rule again on the output, from the input files.
+        schedule_check = subprocess.run(
+            [
+                sys.executable,
+                str(root / "scripts" / "check_schedule.py"),
+                "--config",
+                str(config_path),
+            ],
+            check=False,
+        )
+        if schedule_check.returncode != 0:
+            return schedule_check.returncode
 
     base_dir = config_path.parent.parent
     output_csv = resolve_path(base_dir, config.get("output_csv", "output/schedule.csv"))

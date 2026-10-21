@@ -120,8 +120,21 @@ The solver tried, and there is no way to satisfy every hard rule simultaneously.
 3. **Are weekend caps too tight?** Count weekend coverage rows (Sat + Sun within the solve window). Sum `max_weekend_shifts` across clinicians. If demand exceeds cap, you'll be infeasible.
 4. **Did you set a long `min_days_between_assignments`?** A 3+ day rest gap with daily coverage is hard to satisfy with a small group. Try lowering the gap.
 5. **Is anyone's eligibility wrong?** If `can_or` is set to 0 for everyone who can actually cover OR, the solver has no eligible candidates.
+6. **Do the `shift_types.csv` rules leave too few people?** A `weekend_block` shift needs people with `max_weekend_shifts` of 2 or more, because a block is two weekend shifts. `next_day_off` and `post_call_ok = 0` take people out of the next day. Read the flags back to the admin. Change a flag in the app, not in the solver.
 
 The fastest debugging move is: temporarily delete `requests.csv` (or move it aside), re-solve. If that succeeds, you know it's a request that's blocking. Then add requests back one at a time.
+
+### `shift_types.csv has no row for X.`
+
+`coverage.csv` has a shift type that `shift_types.csv` does not list. The solver stops, because a missing row would switch that shift's rules off without a word. Export again from the app, or add the row with its `post_call_ok`, `next_day_off` and `weekend_block` values.
+
+### `X is a weekend block, but SAT needs N and SUN needs M. Make the two counts equal.`
+
+One person holds Saturday and Sunday of a block, so the two days must need the same number of people. Fix the coverage for one of the two days.
+
+### `Schedule check FAILED: N broken rule(s)`
+
+`scripts/check_schedule.py` found a schedule row that breaks a hard rule. Each line names the rule (`coverage`, `eligibility`, `one_per_day`, `requests`, `caps`, `min_rest`, `weekend_block`, `next_day_off`, `post_call_ok`) and the people and dates. The stock solver does not make such a schedule. The usual cause is an edit to `solver.py`, or a schedule CSV edited by hand. Do not submit that schedule.
 
 ### Status: `FEASIBLE` (instead of `OPTIMAL`)
 
